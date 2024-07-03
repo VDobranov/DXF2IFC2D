@@ -1,0 +1,75 @@
+@startuml General
+
+<style>
+activityDiagram {
+  FontName Iosevka
+  MaximumWidth 400
+}
+</style>
+
+start
+:DXF<
+:Анализ слоёв в DXF;
+:Список «синих» полилиний;
+if (округление?) then
+	while (Перебор «синих» полилиний)
+		:Определение точки с минимальными X, Y;
+		:Округление X, Y;
+		:Определение дельт между сырыми и округлёнными X, Y;
+		:Выбор рамкой контур полилинии + 5 мм;
+		:Перемещение всех полилиний, попавших в рамку, на дельты;
+	endwhile
+endif
+if (нормализация?) then
+	while (Перебор «синих» полилиний)
+		:Определение точки с минимальными X, Y;
+		:Определение дельт между X, Y и 0, 0;
+		:Выбор рамкой контур полилинии + 5 мм;
+		:Перемещение всех полилиний, попавших в рамку, на дельты;
+		:Сохранение всех полилиний, попавших в рамку, в отдельный файл;
+	endwhile
+endif
+:DXF × N>
+end
+
+start
+:DXF<
+:Анализ слоёв в DXF;
+:Сбор всех LWPOLYLINE;
+' :LWPOLYLINE для формирования тела пластины;
+' :Список LWPOLYLINE для сквозного вырезания пластины;
+' :Список LWPOLYLINE для половинного вырезания пластины;
+while (Перебор всех LWPOLYLINE)
+	:Выборка точек;
+	:Конвертация выборки точек в IfcCartesianPointList с учётом промежуточных точек в случае скруглений;
+	:Формирование IfcLineIndex и IfcArcIndex на основе IfcCartesianPointList;
+	:Формирование замкнутых IfcIndexedPolyCurve на основе IfcLineIndex и IfcArcIndex;
+	:Добавление IfcIndexedPolyCurve в соответствующий исходному слою список;
+	split
+		:«Синий» для внешнего контура пластины;
+	split again
+		:«Голубой» для внутренних вырезов;
+	split again
+		:«Зелёный» для половинных вырезов;
+	split again
+		:«Жёлтый» для надписей;
+	end split
+endwhile
+:Формирование IfcArbitraryProfileDefWithVoids, в котором:
+* «Синяя» IfcIndexedPolyCurve формирует OuterCurve
+* «Голубые» IfcIndexedPolyCurve формируют InnerCurves;
+:Формирование IfcArbitraryClosedProfileDef из «зелёных» IfcIndexedPolyCurve;
+:IfcArbitraryProfileDefWithVoids
+IfcArbitraryClosedProfileDef × N>
+end
+
+legend
+Цвета в DXF
+1. Красный
+2. Жёлтый
+3. Зелёный
+4. Голубой
+5. Синий
+end legend
+
+@enduml
