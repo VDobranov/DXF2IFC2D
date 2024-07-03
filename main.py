@@ -32,12 +32,12 @@ print(f"Number of blue polylines: {len(blue_polys)}")
 
 def get_min_coords(pline: LWPolyline) -> tuple[float, float]:
     """
-    Function get_min_coords takes an LWPolyline object and returns a tuple of two numbers: the minimum x-coordinate and the minimum y-coordinate.
+    Функция get_min_coords принимает объект LWPolyline и возвращает кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты.
 
-    :param pline: LWPolyline object
+    :param pline: объект LWPolyline
     :type pline: LWPolyline
-    :return: tuple of two numbers: the minimum x-coordinate and the minimum y-coordinate
-    :rtype: tuple[float, float]
+    :return: кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты
+    :rtype: tuple[float, float] 
     """
     _points: list[Sequence[float]]  = pline.get_points()
     _x = min(_points[i][0] for i in range(len(_points)))
@@ -46,13 +46,13 @@ def get_min_coords(pline: LWPolyline) -> tuple[float, float]:
 
 def nullify_coords(pline: LWPolyline, x:float, y: float) -> None:
     """
-    Function nullify_coords takes an LWPolyline object and two numbers (x and y) and normalizes the coordinates of the LWPolyline object by subtracting x and y from each point's x and y coordinates, respectively.
+    Функция nullify_coords принимает объект LWPolyline и два числа (x и y) и нормализует координаты объекта LWPolyline, вычитая x и y из каждого x-координаты и y-координаты соответственно.
 
-    :param pline: LWPolyline object
+    :param pline: LWPolyline объект
     :type pline: LWPolyline
-    :param x: number to subtract from each point's x-coordinate
+    :param x: число, которое вычитается из каждой x-координаты
     :type x: float
-    :param y: number to subtract from each point's y-coordinate
+    :param y: число, которое вычитается из каждой y-координаты
     :type y: float
     :return: None
     :rtype: None
