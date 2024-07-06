@@ -41,8 +41,8 @@ start
 ' :Список LWPOLYLINE для половинного вырезания пластины;
 while (Перебор всех LWPOLYLINE)
 	:Выборка точек;
-	:Конвертация выборки точек в IfcCartesianPointList с учётом промежуточных точек в случае скруглений;
-	:Формирование IfcLineIndex и IfcArcIndex на основе IfcCartesianPointList;
+	:Конвертация выборки точек в IfcCartesianPointList2D с учётом промежуточных точек в случае скруглений;
+	:Формирование IfcLineIndex и IfcArcIndex на основе IfcCartesianPointList2D;
 	:Формирование замкнутых IfcIndexedPolyCurve на основе IfcLineIndex и IfcArcIndex;
 	:Добавление IfcIndexedPolyCurve в соответствующий исходному слою список;
 	split
