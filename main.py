@@ -13,8 +13,8 @@ import ifcopenshell.util.shape_builder
 from ifcopenshell import entity_instance
 from pprint import pprint
 
-# DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
-DXFFILENAME: str = "tiny"
+DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
+# DXFFILENAME: str = "tiny"
 IFCFILENAME: str = DXFFILENAME
 DXFPATH = "./drawings"
 IFCPATH = "./models"
@@ -174,7 +174,7 @@ def convert_poly_to_PointList(poly: LWPolyline) -> tuple[list, list]:
     :rtype: tuple[list, list]
     """
     ifc_points: list[tuple[float, float]] = []
-    arc_indexes: list[int] = []
+    arc_middles: list[int] = []
     dxf_points: list[Sequence[float]] = poly.get_points()
     for p in dxf_points:
         ifc_points.append((float(p[0]), float(p[1])))
@@ -185,19 +185,20 @@ def convert_poly_to_PointList(poly: LWPolyline) -> tuple[list, list]:
                 p_next = dxf_points[0]
             p_center = find_center_on_arc(p, p_next)
             ifc_points.append((float(p_center[0]), float(p_center[1])))
-            arc_indexes.append(dxf_points.index(p)+1)
-    return ifc_points, arc_indexes
+            arc_middles.append(len(ifc_points)-1)
+    return ifc_points, arc_middles
 
 
 mins: tuple[float, float] = get_min_coords(blue_polys[-1])
 for e in details_polys[-1]:
     nullify_coords(e, mins[0], mins[1])  # type: ignore
 
-ifc_points, arc_indexes = convert_poly_to_PointList(blue_polys[-1])
-curve = builder.polyline(ifc_points, arc_points=arc_indexes, closed=True)
+ifc_points, arc_middles = convert_poly_to_PointList(blue_polys[-1])
+print(arc_middles)
+curve = builder.polyline(ifc_points, arc_points=arc_middles, closed=True)
 curve.SelfIntersect = False
 
-profile = builder.profile(curve, name="test")
+profile = builder.profile(curve, name=f"{IFCFILENAME[0:4]}")
 
 dwg.saveas(f"{DXFPATH}/{DXFFILENAME}_.dxf")
 model.write(f"{IFCPATH}/{IFCFILENAME}.ifc")
