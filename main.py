@@ -14,7 +14,7 @@ from ifcopenshell import entity_instance
 from pprint import pprint
 
 DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
-# DXFFILENAME: str = "tiny"
+# DXFFILENAME: str = "tiny1"
 IFCFILENAME: str = DXFFILENAME
 DXFPATH = "./drawings"
 IFCPATH = "./models"
@@ -109,10 +109,7 @@ def nullify_coords(pline: LWPolyline, x: float, y: float) -> None:
     pline.set_points(__points)
 
 
-details_polys: list[list[LWPolyline]] = []
-
-
-def group_polys_by_details(poly: LWPolyline) -> None:
+def group_polys_by_details(poly: LWPolyline) -> list[LWPolyline]:
     """
     Функция группирует полилинии, попавшие в описываемый прямоугольник вокруг рассматриваемой полилинии.
 
@@ -123,14 +120,13 @@ def group_polys_by_details(poly: LWPolyline) -> None:
     maxs: tuple[float, float] = get_max_coords(poly)
     mins: tuple[float, float] = get_min_coords(poly)
     window: Window = select.Window(mins, maxs)
-    details_polys.append([])
+    group: list[LWPolyline] = []
     for e in select.bbox_overlap(window, msp):
-        i: int = blue_polys.index(poly)
-        details_polys[i].append(e)  # type: ignore
-
-
-for bp in blue_polys:
-    group_polys_by_details(bp)
+        if e not in blue_polys and e not in green_polys and e not in lblue_polys:
+            continue
+        if e.dxftype() == "LWPOLYLINE":
+            group.append(e)  # type: ignore
+    return group
 
 
 def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[float]:
@@ -157,9 +153,50 @@ def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[flo
     ym = middle[1]
     part_radius: float = math.sqrt((xc - xm) ** 2 + (yc - ym) ** 2)
     radius: float = ezdxf.math.bulge_radius((x1, y1), (x2, y2), p1[4])
-    coeff: float = radius / part_radius
-    x = xc - (xc - xm) * coeff
-    y = yc - (yc - ym) * coeff
+    if part_radius != 0.0:
+        coeff: float = radius / part_radius
+        if p1[4] < 0:
+            if y2 > y1:
+                x = xc - (xc - xm) * coeff
+            else:
+                x = xc + (xc - xm) * coeff
+            if x2 > x1:
+                y = yc + (yc - ym) * coeff
+            else:
+                y = yc - (yc - ym) * coeff
+        else:
+            if y2 > y1:
+                x = xc + (xc - xm) * coeff
+            else:
+                x = xc - (xc - xm) * coeff
+            if x2 > x1:
+                y = yc - (yc - ym) * coeff
+            else:
+                y = yc + (yc - ym) * coeff
+    else:
+        alpha: float = 0
+        if x2 != x1:
+            alpha = math.pi/2 - math.atan((y2 - y1)/(x2 - x1))
+        xr = abs(radius * math.cos(alpha))
+        yr = abs(radius * math.sin(alpha))
+        if p1[4] < 0:
+            if y2 > y1:
+                x = xc - xr
+            else:
+                x = xc + xr
+            if x2 > x1:
+                y = yc + yr
+            else:
+                y = yc - yr
+        else:
+            if y2 > y1:
+                x = xc + xr
+            else:
+                x = xc - xr
+            if x2 > x1:
+                y = yc - yr
+            else:
+                y = yc + yr
     point: tuple[float, float] = (x, y)
     return point
 
@@ -189,20 +226,66 @@ def convert_poly_to_PointList(poly: LWPolyline) -> tuple[list, list]:
     return ifc_points, arc_middles
 
 
-mins: tuple[float, float] = get_min_coords(blue_polys[-1])
-for e in details_polys[-1]:
-    nullify_coords(e, mins[0], mins[1])  # type: ignore
+def convert_detail_polys_to_Profiles(polys: list[LWPolyline]) -> list[entity_instance]:
+    """
+    Функция преобразует полилинии в профили.
 
-ifc_points, arc_middles = convert_poly_to_PointList(blue_polys[-1])
-print(arc_middles)
-curve = builder.polyline(ifc_points, arc_points=arc_middles, closed=True)
-curve.SelfIntersect = False
+    :param polys: список полилиний
+    :type polys: list[LWPolyline]
+    :return: список профилей
+    :rtype: list[entity_instance]
+    """
+    profiles: list[entity_instance] = []
+    blue_curves: dict[str, entity_instance] = dict()
+    lblue_curves: dict[str, entity_instance] = dict()
+    green_curves: dict[str, entity_instance] = dict()
+    yellow_curves: dict[str, entity_instance] = dict()
+    name: str = ""
+    for p in polys:
+        ifc_points, arc_middles = convert_poly_to_PointList(p)
+        curve = builder.polyline(
+            ifc_points, arc_points=arc_middles, closed=True)
+        curve.SelfIntersect = False
+        if p in blue_polys:
+            blue_curves[p.dxf.handle] = curve
+            name = p.dxf.handle
+        elif p in lblue_polys:
+            lblue_curves[p.dxf.handle] = curve
+        elif p in green_polys:
+            green_curves[p.dxf.handle] = curve
+        elif p in yellow_polys:
+            yellow_curves[p.dxf.handle] = curve
+    profile = builder.profile(list(blue_curves.values())[0], inner_curves=list(
+        lblue_curves.values()), name=f"{name}")
+    profiles.append(profile)
+    for k, v in green_curves.items():
+        cut = builder.profile(v, name=f"{name}_cut_{k}")
+        profiles.append(cut)
+    return profiles
 
-profile = builder.profile(curve, name=f"{IFCFILENAME[0:4]}")
+
+details_polys: list[list[LWPolyline]] = []
+for bp in blue_polys:
+    details_polys.append(group_polys_by_details(bp))
+
+for group in details_polys:
+    blue: LWPolyline
+    for ee in group:
+        if ee in blue_polys:
+            blue = ee
+            break
+    mins: tuple[float, float] = get_min_coords(blue)
+    maxs: tuple[float, float] = get_max_coords(blue)
+    _x = (maxs[0] - mins[0]) / 2 + mins[0]
+    _y = (maxs[1] - mins[1]) / 2 + mins[1]
+    for ee in group:
+        nullify_coords(ee, _x, _y)
+    convert_detail_polys_to_Profiles(group)
 
 dwg.saveas(f"{DXFPATH}/{DXFFILENAME}_.dxf")
 model.write(f"{IFCPATH}/{IFCFILENAME}.ifc")
 
+# валидация
 logger = ios.validate.json_logger()
 ios.validate.validate(model, logger, express_rules=True)  # type: ignore
 pprint(logger.statements)
