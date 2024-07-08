@@ -9,12 +9,13 @@ import ezdxf.math
 from ezdxf.select import Window
 import ifcopenshell as ios
 import ifcopenshell.validate
+import ifcopenshell.api as api
 import ifcopenshell.util.shape_builder
 from ifcopenshell import entity_instance
 from pprint import pprint
 
-DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
-# DXFFILENAME: str = "tiny1"
+# DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
+DXFFILENAME: str = "tiny1"
 IFCFILENAME: str = DXFFILENAME
 DXFPATH = "./drawings"
 IFCPATH = "./models"
@@ -140,63 +141,36 @@ def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[flo
     :return: центр дуги
     :rtype: Sequence[float]
     """
-    x1 = p1[0]
-    y1 = p1[1]
-    x2 = p2[0]
-    y2 = p2[1]
+    x1, y1 = p1[0], p1[1]
+    x2, y2 = p2[0], p2[1]
+
     center: tuple[float, float] = ezdxf.math.bulge_center(
         (x1, y1), (x2, y2), p1[4])
-    xc = center[0]
-    yc = center[1]
-    middle: tuple[float, float] = (x1 + (x2 - x1) / 2, y1 + (y2-y1) / 2)
-    xm = middle[0]
-    ym = middle[1]
-    part_radius: float = math.sqrt((xc - xm) ** 2 + (yc - ym) ** 2)
+    xc, yc = center[0], center[1]
     radius: float = ezdxf.math.bulge_radius((x1, y1), (x2, y2), p1[4])
-    if part_radius != 0.0:
-        coeff: float = radius / part_radius
-        if p1[4] < 0:
-            if y2 > y1:
-                x = xc - (xc - xm) * coeff
-            else:
-                x = xc + (xc - xm) * coeff
-            if x2 > x1:
-                y = yc + (yc - ym) * coeff
-            else:
-                y = yc - (yc - ym) * coeff
+    alpha: float = 0
+    if x2 != x1:
+        alpha = math.pi/2 - math.atan((y2 - y1)/(x2 - x1))
+    xr = abs(radius * math.cos(alpha))
+    yr = abs(radius * math.sin(alpha))
+    if p1[4] < 0:
+        if y2 > y1:
+            x = xc - xr
         else:
-            if y2 > y1:
-                x = xc + (xc - xm) * coeff
-            else:
-                x = xc - (xc - xm) * coeff
-            if x2 > x1:
-                y = yc - (yc - ym) * coeff
-            else:
-                y = yc + (yc - ym) * coeff
+            x = xc + xr
+        if x2 > x1:
+            y = yc + yr
+        else:
+            y = yc - yr
     else:
-        alpha: float = 0
-        if x2 != x1:
-            alpha = math.pi/2 - math.atan((y2 - y1)/(x2 - x1))
-        xr = abs(radius * math.cos(alpha))
-        yr = abs(radius * math.sin(alpha))
-        if p1[4] < 0:
-            if y2 > y1:
-                x = xc - xr
-            else:
-                x = xc + xr
-            if x2 > x1:
-                y = yc + yr
-            else:
-                y = yc - yr
+        if y2 > y1:
+            x = xc + xr
         else:
-            if y2 > y1:
-                x = xc + xr
-            else:
-                x = xc - xr
-            if x2 > x1:
-                y = yc - yr
-            else:
-                y = yc + yr
+            x = xc - xr
+        if x2 > x1:
+            y = yc - yr
+        else:
+            y = yc + yr
     point: tuple[float, float] = (x, y)
     return point
 
@@ -268,6 +242,7 @@ details_polys: list[list[LWPolyline]] = []
 for bp in blue_polys:
     details_polys.append(group_polys_by_details(bp))
 
+detail_profiles: list[list[entity_instance]] = []
 for group in details_polys:
     blue: LWPolyline
     for ee in group:
@@ -280,7 +255,29 @@ for group in details_polys:
     _y = (maxs[1] - mins[1]) / 2 + mins[1]
     for ee in group:
         nullify_coords(ee, _x, _y)
-    convert_detail_polys_to_Profiles(group)
+    detail_profiles.append(convert_detail_polys_to_Profiles(group))
+
+# ex = builder.extrude(detail_profiles[0][0])
+# ctx = model.by_id(15)
+# rep = builder.get_representation(ctx, ex)
+
+# # Create our element type. Types do not have an object placement.
+# element_type = api.run("root.create_entity", model, ifc_class="IfcFurnitureType")
+
+# # Let's create our representation!
+# # See above sections for examples on how to create representations.
+# representation = rep
+
+# # Assign our representation to the element type.
+# api.run("geometry.assign_representation", model, product=element_type, representation=representation)
+
+# # Create our element occurrence with an object placement.
+# element = api.run("root.create_entity", model, ifc_class="IfcFurniture")
+# api.run("geometry.edit_object_placement", model, product=element)
+
+# # Assign our furniture occurrence to the type.
+# # That's it! The representation will automatically be mapped!
+# api.run("type.assign_type", model, related_objects=[element], relating_type=element_type)
 
 dwg.saveas(f"{DXFPATH}/{DXFFILENAME}_.dxf")
 model.write(f"{IFCPATH}/{IFCFILENAME}.ifc")
