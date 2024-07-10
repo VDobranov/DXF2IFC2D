@@ -2,10 +2,10 @@ import math
 
 from typing import Sequence
 import ezdxf
+import ezdxf.math
 from ezdxf import select
 from ezdxf.document import Modelspace
 from ezdxf.entities import LWPolyline
-import ezdxf.math
 from ezdxf.select import Window
 
 from ifcopenshell import entity_instance
