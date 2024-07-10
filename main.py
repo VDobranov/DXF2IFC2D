@@ -1,27 +1,28 @@
-import math
+from src.dxf import get_min_coords, get_max_coords, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
+
 import sys
-from typing import Sequence, Any
+
 import ezdxf
-from ezdxf import select
 from ezdxf.document import Drawing, Modelspace
-from ezdxf.entities import DXFEntity, Layer, LWPolyline
+from ezdxf.entities import Layer, LWPolyline
 import ezdxf.math
-from ezdxf.select import Window
+
 import ifcopenshell as ios
-import ifcopenshell.validate
-import ifcopenshell.api as api
-import ifcopenshell.util.shape_builder
-from ifcopenshell import entity_instance
+from ifcopenshell import entity_instance, validate
+from ifcopenshell.api import run
+from ifcopenshell.util import representation, shape_builder
+
 from pprint import pprint
 
-# DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
-DXFFILENAME: str = "tiny1"
+DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
+# DXFFILENAME: str = "tiny1"
 IFCFILENAME: str = DXFFILENAME
-DXFPATH = "./drawings"
-IFCPATH = "./models"
+DXFPATH: str = "./drawings"
+IFCPATH: str = "./models"
+THICKNESS: float = 18
 
 model = ios.open(f"{IFCPATH}/TEMPLATE.ifc")
-builder = ios.util.shape_builder.ShapeBuilder(model)
+builder = shape_builder.ShapeBuilder(model)
 
 try:
     dwg: Drawing = ezdxf.readfile(f"{DXFPATH}/{DXFFILENAME}.dxf")
@@ -54,193 +55,15 @@ for e in msp.query("LWPOLYLINE"):
     if _layer.color == 5:
         blue_polys.append(e)  # type: ignore
 
-# print(f"Number of blue polylines: {len(blue_polys)}")
-
-
-def get_min_coords(pline: LWPolyline) -> tuple[float, float]:
-    """
-    Функция get_min_coords принимает объект LWPolyline и возвращает кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты.
-
-    :param pline: объект LWPolyline
-    :type pline: LWPolyline
-    :return: кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты
-    :rtype: tuple[float, float] 
-    """
-    _points: list[Sequence[float]] = pline.get_points()
-    _x = min(_points[i][0] for i in range(len(_points)))
-    _y = min(_points[i][1] for i in range(len(_points)))
-    return _x, _y
-
-
-def get_max_coords(pline: LWPolyline) -> tuple[float, float]:
-    """
-    Функция get_max_coords принимает объект LWPolyline и возвращает кортеж из двух чисел: максимальной x-координаты и максимальной y-координаты.
-
-    :param pline: объект LWPolyline
-    :type pline: LWPolyline
-    :return: кортеж из двух чисел: максимальной x-координаты и максимальной y-координаты
-    :rtype: tuple[float, float] 
-    """
-    _points: list[Sequence[float]] = pline.get_points()
-    _x = max(_points[i][0] for i in range(len(_points)))
-    _y = max(_points[i][1] for i in range(len(_points)))
-    return _x, _y
-
-
-def nullify_coords(pline: LWPolyline, x: float, y: float) -> None:
-    """
-    Функция nullify_coords принимает объект LWPolyline и два числа (x и y) и нормализует координаты объекта LWPolyline, вычитая x и y из каждого x-координаты и y-координаты соответственно.
-
-    :param pline: LWPolyline объект
-    :type pline: LWPolyline
-    :param x: число, которое вычитается из каждой x-координаты
-    :type x: float
-    :param y: число, которое вычитается из каждой y-координаты
-    :type y: float
-    :return: None
-    :rtype: None
-    """
-    _points: list[Sequence[float]] = pline.get_points()
-    __points: list[list[float]] = []
-    for p in _points:
-        p = list(p)
-        p[0] -= x
-        p[1] -= y
-        __points.append(p)
-    pline.set_points(__points)
-
-
-def group_polys_by_details(poly: LWPolyline) -> list[LWPolyline]:
-    """
-    Функция группирует полилинии, попавшие в описываемый прямоугольник вокруг рассматриваемой полилинии.
-
-    :param poly: полилиния, внутри которой нужно сгруппировать прочии полилинии
-    :type poly: LWPolyline
-    :return: None
-    """
-    maxs: tuple[float, float] = get_max_coords(poly)
-    mins: tuple[float, float] = get_min_coords(poly)
-    window: Window = select.Window(mins, maxs)
-    group: list[LWPolyline] = []
-    for e in select.bbox_overlap(window, msp):
-        if e not in blue_polys and e not in green_polys and e not in lblue_polys:
-            continue
-        if e.dxftype() == "LWPOLYLINE":
-            group.append(e)  # type: ignore
-    return group
-
-
-def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[float]:
-    """
-    Функция находит центр на дуге.
-
-    :param p1: первая точка дуги
-    :type p1: Sequence[float]
-    :param p2: вторая точка дуги
-    :type p2: Sequence[float]
-    :return: центр дуги
-    :rtype: Sequence[float]
-    """
-    x1, y1 = p1[0], p1[1]
-    x2, y2 = p2[0], p2[1]
-
-    center: tuple[float, float] = ezdxf.math.bulge_center(
-        (x1, y1), (x2, y2), p1[4])
-    xc, yc = center[0], center[1]
-    radius: float = ezdxf.math.bulge_radius((x1, y1), (x2, y2), p1[4])
-    alpha: float = 0
-    if x2 != x1:
-        alpha = math.pi/2 - math.atan((y2 - y1)/(x2 - x1))
-    xr = abs(radius * math.cos(alpha))
-    yr = abs(radius * math.sin(alpha))
-    if p1[4] < 0:
-        if y2 > y1:
-            x = xc - xr
-        else:
-            x = xc + xr
-        if x2 > x1:
-            y = yc + yr
-        else:
-            y = yc - yr
-    else:
-        if y2 > y1:
-            x = xc + xr
-        else:
-            x = xc - xr
-        if x2 > x1:
-            y = yc - yr
-        else:
-            y = yc + yr
-    point: tuple[float, float] = (x, y)
-    return point
-
-
-def convert_poly_to_PointList(poly: LWPolyline) -> tuple[list, list]:
-    """
-    Функция преобразует полилинию в список точек с указанием, какие точки являются вершинами дуг.
-
-    :param poly: полилиния, которую нужно преобразовать
-    :type poly: LWPolyline
-    :return: список точек и индексы дуг
-    :rtype: tuple[list, list]
-    """
-    ifc_points: list[tuple[float, float]] = []
-    arc_middles: list[int] = []
-    dxf_points: list[Sequence[float]] = poly.get_points()
-    for p in dxf_points:
-        ifc_points.append((float(p[0]), float(p[1])))
-        if p[4] != 0:
-            if p != dxf_points[-1]:
-                p_next = dxf_points[dxf_points.index(p)+1]
-            else:
-                p_next = dxf_points[0]
-            p_center = find_center_on_arc(p, p_next)
-            ifc_points.append((float(p_center[0]), float(p_center[1])))
-            arc_middles.append(len(ifc_points)-1)
-    return ifc_points, arc_middles
-
-
-def convert_detail_polys_to_Profiles(polys: list[LWPolyline]) -> list[entity_instance]:
-    """
-    Функция преобразует полилинии в профили.
-
-    :param polys: список полилиний
-    :type polys: list[LWPolyline]
-    :return: список профилей
-    :rtype: list[entity_instance]
-    """
-    profiles: list[entity_instance] = []
-    blue_curves: dict[str, entity_instance] = dict()
-    lblue_curves: dict[str, entity_instance] = dict()
-    green_curves: dict[str, entity_instance] = dict()
-    yellow_curves: dict[str, entity_instance] = dict()
-    name: str = ""
-    for p in polys:
-        ifc_points, arc_middles = convert_poly_to_PointList(p)
-        curve = builder.polyline(
-            ifc_points, arc_points=arc_middles, closed=True)
-        curve.SelfIntersect = False
-        if p in blue_polys:
-            blue_curves[p.dxf.handle] = curve
-            name = p.dxf.handle
-        elif p in lblue_polys:
-            lblue_curves[p.dxf.handle] = curve
-        elif p in green_polys:
-            green_curves[p.dxf.handle] = curve
-        elif p in yellow_polys:
-            yellow_curves[p.dxf.handle] = curve
-    profile = builder.profile(list(blue_curves.values())[0], inner_curves=list(
-        lblue_curves.values()), name=f"{name}")
-    profiles.append(profile)
-    for k, v in green_curves.items():
-        cut = builder.profile(v, name=f"{name}_cut_{k}")
-        profiles.append(cut)
-    return profiles
-
-
 details_polys: list[list[LWPolyline]] = []
 for bp in blue_polys:
-    details_polys.append(group_polys_by_details(bp))
+    details_polys.append(group_polys_by_details(
+        poly=bp,
+        msp=msp,
+        blue_polys=blue_polys,
+        green_polys=green_polys,
+        lblue_polys=lblue_polys
+    ))
 
 detail_profiles: list[list[entity_instance]] = []
 for group in details_polys:
@@ -255,7 +78,133 @@ for group in details_polys:
     _y = (maxs[1] - mins[1]) / 2 + mins[1]
     for ee in group:
         nullify_coords(ee, _x, _y)
-    detail_profiles.append(convert_detail_polys_to_Profiles(group))
+    detail_profiles.append(convert_detail_polys_to_Profiles(
+        polys=group,
+        builder=builder,
+        blue_polys=blue_polys,
+        lblue_polys=lblue_polys,
+        green_polys=green_polys,
+        yellow_polys=yellow_polys
+    ))
+
+body: entity_instance = representation.get_context(
+    model, "Model", "Body", "MODEL_VIEW")
+history: entity_instance = model.by_type("IfcOwnerHistory")[0]
+site: entity_instance = model.by_type('IfcSite')[0]
+storey: entity_instance = model.by_type('IfcBuildingStorey')[0]
+origin: entity_instance = model.by_type('IfcCartesianPoint')[0]
+
+placement3d: entity_instance = model.by_type("IfcAxis2Placement3D")[0]
+placement2d: entity_instance = model.by_type("IfcAxis2Placement2D")[0]
+
+for dir in model.by_type("IfcDirection"):
+    if dir.DirectionRatios[0] == 1 and dir.DirectionRatios[1] == 0 and dir.DirectionRatios[2] == 0:
+        dir_x: entity_instance = dir
+        break
+
+for dir in model.by_type("IfcDirection"):
+    if dir.DirectionRatios[0] == 0 and dir.DirectionRatios[1] == 1 and dir.DirectionRatios[2] == 0:
+        dir_z: entity_instance = dir
+        break
+
+for dir in model.by_type("IfcDirection"):
+    if dir.DirectionRatios[0] == 0 and dir.DirectionRatios[1] == 0 and dir.DirectionRatios[2] == 1:
+        dir_z: entity_instance = dir
+        break
+
+'''
+Этот код создает словарь local_placements, где ключами являются строки, сформированные из идентификаторов объектов IfcLocalPlacement, и значениями - сами объекты IfcLocalPlacement. Он проходит по всем объектам IfcLocalPlacement в модели и для каждого объекта формирует строку, содержащую идентификаторы объектов, связанных с этим объектом IfcLocalPlacement, и добавляет эту строку в словарь как ключ с соответствующим объектом IfcLocalPlacement в качестве значения.
+'''
+local_placements: dict[str, entity_instance] = dict()
+for lp in model.by_type("IfcLocalPlacement"):
+    if lp.PlacementRelTo != None:
+        _rel = lp.PlacementRelTo.RelativePlacement
+        name1: str = f"{_rel.Location.id()}-{_rel.Axis.id()}-{_rel.RefDirection.id()}"
+    else:
+        name1: str = "None"
+    _rel = lp.RelativePlacement
+    name2: str = f"{_rel.Location.id()}-{_rel.Axis.id()}-{_rel.RefDirection.id()}"
+    name: str = f"{name1}/{name2}"
+    local_placements[name] = lp
+
+print(*local_placements.keys())
+
+
+'''
+Этот код создает объект IfcLocalPlacement на основе заданных параметров. Если точка не задана, используется точка по умолчанию. Если объект IfcLocalPlacement уже существует в словаре local_placements, он берется из словаря. В противном случае, создается новый объект IfcLocalPlacement и добавляется в словарь. Затем возвращается созданный или существующий объект IfcLocalPlacement. 
+'''
+def create_LocalPlacement(
+        local_placements: dict[str, entity_instance],
+        placement_rel: entity_instance | None = None,
+        point: entity_instance = origin,
+        dir_z: entity_instance = dir_z,
+        dir_x: entity_instance = dir_x,
+) -> entity_instance:
+    if placement_rel != None:
+        name1: str = f"{placement_rel.Location.id()}-{placement_rel.Axis.id()}-{placement_rel.RefDirection.id()}"
+    else:
+        name1: str = "None"
+    name2: str = f"{point.id()}-{dir_z.id()}-{dir_x.id()}"
+    name: str = f"{name1}/{name2}"
+    if name not in local_placements:
+        placement = model.createIfcAxis2placement3d(point, dir_z, dir_x)
+        local_placement = model.createIfcLocalPlacement(
+            placement_rel, placement)
+        local_placements[name] = local_placement
+    else:
+        local_placement = local_placements[name]
+    return local_placement
+
+
+def create_IfcArbitraryProfileDefWithVoids(ProfileName: str, OuterCurve: entity_instance, InnerCurves: list[entity_instance]) -> entity_instance:
+    return model.createIfcArbitraryProfileDefWithVoids("AREA", ProfileName, OuterCurve, InnerCurves)
+
+
+def create_IfcExtrudedAreaSolid(SweptArea: entity_instance, Depth: float) -> entity_instance:
+    return model.createIfcExtrudedAreaSolid(SweptArea, None, dir_z, Depth)
+
+
+def create_FoundationStudType(profile: entity_instance):
+    stud = run("root.create_entity", model, ifc_class="IfcMechanicalFastenerType",
+               predefined_type="STUD", name=f"Ш")
+    # # print(stud.Name)
+    # stud.NominalLength = L
+    # stud.NominalDiameter = d
+    # plist = create_IfcCartesianPointList2D_stud(L, l, R, d)
+    # pcurve = create_IfcIndexedPolyCurve_stud(plist, create_Segments_stud())
+    # sds = create_IfcSweptDiskSolid(pcurve, d/2)
+    sds = create_IfcExtrudedAreaSolid(SweptArea=profile, Depth=THICKNESS/2)
+    representation = model.createIfcShapeRepresentation(
+        ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType="AdvancedSweptSolid", Items=[sds])
+    # offset = model.createIfcCartesianPoint([0.0,0.0,float(l0)])
+    # placement = model.createIfcAxis2placement3d(offset, dir_z, dir_x)
+    local_placement = create_LocalPlacement(local_placements=local_placements)
+    placement = local_placement.RelativePlacement
+    representationmap = model.createIfcRepresentationMap(
+        placement, representation)
+    # run("geometry.assign_representation", model, product=stud, representation=representation)
+    stud.RepresentationMaps = [representationmap]
+    return stud
+
+
+def create_FoundationStud(L, l, R, d, l0) -> entity_instance:
+    stud_type = create_FoundationStudType(L, l, R, d, l0)
+    stud = run("root.create_entity", model, ifc_class="IfcMechanicalFastener")
+    run("type.assign_type", model, related_objects=[
+        stud], relating_type=stud_type)
+    run("geometry.edit_object_placement", model, product=stud)
+    run("attribute.edit_attributes", model, product=stud, attributes={
+        "Name": stud_type.Name,
+        "ObjectType": stud_type.ElementType,
+        "PredefinedType": stud_type.PredefinedType,
+        "NominalDiameter": stud_type.NominalDiameter,
+        "NominalLength": stud_type.NominalLength
+    })
+    return stud
+
+for p in detail_profiles[3]:
+    create_FoundationStudType(p)
+print(*local_placements.keys())
 
 # ex = builder.extrude(detail_profiles[0][0])
 # ctx = model.by_id(15)
@@ -279,10 +228,11 @@ for group in details_polys:
 # # That's it! The representation will automatically be mapped!
 # api.run("type.assign_type", model, related_objects=[element], relating_type=element_type)
 
+
 dwg.saveas(f"{DXFPATH}/{DXFFILENAME}_.dxf")
 model.write(f"{IFCPATH}/{IFCFILENAME}.ifc")
 
 # валидация
-logger = ios.validate.json_logger()
-ios.validate.validate(model, logger, express_rules=True)  # type: ignore
+logger = validate.json_logger()
+validate.validate(model, logger, express_rules=True)  # type: ignore
 pprint(logger.statements)
