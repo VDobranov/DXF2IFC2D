@@ -4,7 +4,7 @@ import sys
 
 import ezdxf
 from ezdxf.document import Drawing, Modelspace
-from ezdxf.entities import Layer, LWPolyline
+from ezdxf.entities import Layer, LWPolyline, Polyline
 import ezdxf.math
 
 import ifcopenshell as ios
@@ -36,12 +36,12 @@ except ezdxf.DXFStructureError:
 msp: Modelspace = dwg.modelspace()
 
 # Сбор «цветных» полилиний
-red_polys: list[LWPolyline] = []
-yellow_polys: list[LWPolyline] = []
-green_polys: list[LWPolyline] = []
-lblue_polys: list[LWPolyline] = []
-blue_polys: list[LWPolyline] = []
-for e in msp.query("LWPOLYLINE"):
+red_polys: list[LWPolyline | Polyline] = []
+yellow_polys: list[LWPolyline | Polyline] = []
+green_polys: list[LWPolyline | Polyline] = []
+lblue_polys: list[LWPolyline | Polyline] = []
+blue_polys: list[LWPolyline | Polyline] = []
+for e in msp.query("LWPOLYLINE POLYLINE"):
     _layerE: str = e.dxf.layer
     _layer: Layer = dwg.layers.get(_layerE)
     if _layer.color == 1:
@@ -55,7 +55,7 @@ for e in msp.query("LWPOLYLINE"):
     if _layer.color == 5:
         blue_polys.append(e)  # type: ignore
 
-details_polys: list[list[LWPolyline]] = []
+details_polys: list[list[LWPolyline | Polyline]] = []
 for bp in blue_polys:
     details_polys.append(group_polys_by_details(
         poly=bp,
@@ -67,7 +67,7 @@ for bp in blue_polys:
 
 detail_profiles: list[list[entity_instance]] = []
 for group in details_polys:
-    blue: LWPolyline
+    blue: LWPolyline | Polyline
     for ee in group:
         if ee in blue_polys:
             blue = ee
@@ -86,7 +86,6 @@ for group in details_polys:
         green_polys=green_polys,
         yellow_polys=yellow_polys
     ))
-
 
 
 
