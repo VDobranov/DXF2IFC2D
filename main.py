@@ -87,6 +87,10 @@ for group in details_polys:
         yellow_polys=yellow_polys
     ))
 
+
+
+
+
 body: entity_instance = representation.get_context(
     model, "Model", "Body", "MODEL_VIEW")
 history: entity_instance = model.by_type("IfcOwnerHistory")[0]
@@ -98,19 +102,51 @@ placement3d: entity_instance = model.by_type("IfcAxis2Placement3D")[0]
 placement2d: entity_instance = model.by_type("IfcAxis2Placement2D")[0]
 
 for dir in model.by_type("IfcDirection"):
-    if dir.DirectionRatios[0] == 1 and dir.DirectionRatios[1] == 0 and dir.DirectionRatios[2] == 0:
+    if list(dir.DirectionRatios) == [1,0,0]:
         dir_x: entity_instance = dir
         break
 
 for dir in model.by_type("IfcDirection"):
-    if dir.DirectionRatios[0] == 0 and dir.DirectionRatios[1] == 1 and dir.DirectionRatios[2] == 0:
-        dir_z: entity_instance = dir
+    if list(dir.DirectionRatios) == [0,1,0]:
+        dir_y: entity_instance = dir
         break
 
 for dir in model.by_type("IfcDirection"):
-    if dir.DirectionRatios[0] == 0 and dir.DirectionRatios[1] == 0 and dir.DirectionRatios[2] == 1:
+    if list(dir.DirectionRatios) == [0,0,1]:
         dir_z: entity_instance = dir
         break
+
+def check_CartesianPoint(coords: list[float]):
+    found: bool = False
+    for p in model.by_type("IfcCartesianPoint"):
+        if coords == list(p.Coordinates):
+            found = True
+    return found
+        
+def create_CartesianPoint(coords: list[float]) -> entity_instance:
+    found = check_CartesianPoint(coords)
+    if found:
+        for p in model.by_type("IfcCartesianPoint"):
+            if coords == list(p.Coordinates):
+                return p
+    else:
+        return model.createIfcCartesianPoint(coords)
+
+def check_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance:
+    found: bool = False
+    for p in model.by_type("IfcAxis2Placement3D"):
+        if point == p.Location and dir_z == p.Axis and dir_x == p.RefDirection:
+            found = True
+    return found
+
+def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance:
+    found = check_Axis2Placement3D(point, dir_z, dir_x)
+    if found:
+        for p in model.by_type("IfcAxis2Placement3D"):
+            if point == p.Location and dir_z == p.Axis and dir_x == p.RefDirection:
+                return p
+    else:
+        return model.createIfcAxis2Placement3D(point, dir_z, dir_x)
 
 '''
 Этот код создает словарь local_placements, где ключами являются строки, сформированные из идентификаторов объектов IfcLocalPlacement, и значениями - сами объекты IfcLocalPlacement. Он проходит по всем объектам IfcLocalPlacement в модели и для каждого объекта формирует строку, содержащую идентификаторы объектов, связанных с этим объектом IfcLocalPlacement, и добавляет эту строку в словарь как ключ с соответствующим объектом IfcLocalPlacement в качестве значения.
@@ -127,11 +163,16 @@ for lp in model.by_type("IfcLocalPlacement"):
     name: str = f"{name1}/{name2}"
     local_placements[name] = lp
 
-print(*local_placements.keys())
+# print(*local_placements.keys())
 
 
 '''
-Этот код создает объект IfcLocalPlacement на основе заданных параметров. Если точка не задана, используется точка по умолчанию. Если объект IfcLocalPlacement уже существует в словаре local_placements, он берется из словаря. В противном случае, создается новый объект IfcLocalPlacement и добавляется в словарь. Затем возвращается созданный или существующий объект IfcLocalPlacement. 
+Этот код создает объект IfcLocalPlacement на основе заданных параметров. Если точка не задана, используется точка по умолчанию. Если объект IfcLocalPlacement уже существует в словаре local_placements, он берется из словаря. В противном случае, создается новый объект IfcLocalPlacement и добавляется в словарь. Затем возвращается созданный или существующий объект IfcLocalPlacement.
+1. Проверяем, задана ли точка. Если нет, присваиваем ей значение по умолчанию.
+2. Если объект IfcLocalPlacement связан с другим объектом (placement_rel), формируем строку, содержащую идентификаторы этого объекта. Если объект IfcLocalPlacement не связан с другим объектом, в строку включается строка "None".
+3. Формируем уникальное имя для объекта IfcLocalPlacement, используя идентификаторы объектов, связанных с ним.
+4. Проверяем, есть ли уже такой объект IfcLocalPlacement в словаре local_placements. Если нет, создаем новый объект и добавляем его в словарь. Если есть, берем существующий объект из словаря.
+5. Возвращаем созданный или существующий объект IfcLocalPlacement.
 '''
 def create_LocalPlacement(
         local_placements: dict[str, entity_instance],
@@ -147,7 +188,7 @@ def create_LocalPlacement(
     name2: str = f"{point.id()}-{dir_z.id()}-{dir_x.id()}"
     name: str = f"{name1}/{name2}"
     if name not in local_placements:
-        placement = model.createIfcAxis2placement3d(point, dir_z, dir_x)
+        placement = create_Axis2Placement3D(point, dir_z, dir_x)
         local_placement = model.createIfcLocalPlacement(
             placement_rel, placement)
         local_placements[name] = local_placement
@@ -156,55 +197,82 @@ def create_LocalPlacement(
     return local_placement
 
 
-def create_IfcArbitraryProfileDefWithVoids(ProfileName: str, OuterCurve: entity_instance, InnerCurves: list[entity_instance]) -> entity_instance:
-    return model.createIfcArbitraryProfileDefWithVoids("AREA", ProfileName, OuterCurve, InnerCurves)
+# def create_IfcArbitraryProfileDefWithVoids(ProfileName: str, OuterCurve: entity_instance, InnerCurves: list[entity_instance]) -> entity_instance:
+#     return model.createIfcArbitraryProfileDefWithVoids("AREA", ProfileName, OuterCurve, InnerCurves)
 
 
-def create_IfcExtrudedAreaSolid(SweptArea: entity_instance, Depth: float) -> entity_instance:
-    return model.createIfcExtrudedAreaSolid(SweptArea, None, dir_z, Depth)
+def create_IfcExtrudedAreaSolid(
+        sweptArea: entity_instance,
+        depth: float,
+        placement: entity_instance | None = None
+        ) -> entity_instance:
+    return model.createIfcExtrudedAreaSolid(sweptArea, placement, dir_z, depth)
 
 
-def create_FoundationStudType(profile: entity_instance):
-    stud = run("root.create_entity", model, ifc_class="IfcMechanicalFastenerType",
-               predefined_type="STUD", name=f"Ш")
-    # # print(stud.Name)
-    # stud.NominalLength = L
-    # stud.NominalDiameter = d
-    # plist = create_IfcCartesianPointList2D_stud(L, l, R, d)
-    # pcurve = create_IfcIndexedPolyCurve_stud(plist, create_Segments_stud())
-    # sds = create_IfcSweptDiskSolid(pcurve, d/2)
-    sds = create_IfcExtrudedAreaSolid(SweptArea=profile, Depth=THICKNESS/2)
+def create_PlateType(profiles: list[entity_instance], name: str):
+    _cuts: list[entity_instance] = []
+    _sheet: entity_instance = None
+    for profile in profiles:
+        if "cut" in profile.ProfileName:
+            _point: entity_instance = create_CartesianPoint([0.,0.,THICKNESS/2])
+            _placement: entity_instance = create_Axis2Placement3D(_point, dir_z, dir_x)
+            _cuts.append(create_IfcExtrudedAreaSolid(sweptArea=profile, depth=THICKNESS/2+1, placement=_placement))
+        else:
+            _sheet = create_IfcExtrudedAreaSolid(sweptArea=profile, depth=THICKNESS)
+    for cut in _cuts:
+        _sheet = model.createIfcBooleanResult(Operator="DIFFERENCE", FirstOperand=_sheet, SecondOperand=cut)
+    if _sheet.is_a("IfcBooleanResult"):
+        _rtype: str = "CSG"
+    else:
+        _rtype: str = "SweptSolid"
     representation = model.createIfcShapeRepresentation(
-        ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType="AdvancedSweptSolid", Items=[sds])
-    # offset = model.createIfcCartesianPoint([0.0,0.0,float(l0)])
-    # placement = model.createIfcAxis2placement3d(offset, dir_z, dir_x)
+        ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType=_rtype,Items=[_sheet])
     local_placement = create_LocalPlacement(local_placements=local_placements)
     placement = local_placement.RelativePlacement
-    representationmap = model.createIfcRepresentationMap(
-        placement, representation)
-    # run("geometry.assign_representation", model, product=stud, representation=representation)
-    stud.RepresentationMaps = [representationmap]
-    return stud
+    representationmap = model.createIfcRepresentationMap(placement, representation)
+    
+    plate_type = run("root.create_entity", model, ifc_class="IfcPlateType", predefined_type="PART", name=name)
+    plate_type.RepresentationMaps = [representationmap]
+    return plate_type
 
 
-def create_FoundationStud(L, l, R, d, l0) -> entity_instance:
-    stud_type = create_FoundationStudType(L, l, R, d, l0)
-    stud = run("root.create_entity", model, ifc_class="IfcMechanicalFastener")
-    run("type.assign_type", model, related_objects=[
-        stud], relating_type=stud_type)
-    run("geometry.edit_object_placement", model, product=stud)
-    run("attribute.edit_attributes", model, product=stud, attributes={
-        "Name": stud_type.Name,
-        "ObjectType": stud_type.ElementType,
-        "PredefinedType": stud_type.PredefinedType,
-        "NominalDiameter": stud_type.NominalDiameter,
-        "NominalLength": stud_type.NominalLength
-    })
-    return stud
+# def create_FoundationStud(L, l, R, d, l0) -> entity_instance:
+#     stud_type = create_FoundationStudType(L, l, R, d, l0)
+#     stud = run("root.create_entity", model, ifc_class="IfcMechanicalFastener")
+#     run("type.assign_type", model, related_objects=[
+#         stud], relating_type=stud_type)
+#     run("geometry.edit_object_placement", model, product=stud)
+#     run("attribute.edit_attributes", model, product=stud, attributes={
+#         "Name": stud_type.Name,
+#         "ObjectType": stud_type.ElementType,
+#         "PredefinedType": stud_type.PredefinedType,
+#         "NominalDiameter": stud_type.NominalDiameter,
+#         "NominalLength": stud_type.NominalLength
+#     })
+#     return stud
 
-for p in detail_profiles[3]:
-    create_FoundationStudType(p)
-print(*local_placements.keys())
+for p in detail_profiles:
+    create_PlateType(p, p[0].ProfileName)
+# print(*local_placements.keys())
+
+# eas = model.by_type("IfcExtrudedAreaSolid")
+# pprint(eas)
+# for e in eas:
+#     if e.SweptArea.ProfileName == "90":
+#         b1 = e
+#     if e.SweptArea.ProfileName == "90_cut_64":
+#         b2 = e
+
+# br = model.createIfcBooleanResult(Operator="DIFFERENCE", FirstOperand=b1, SecondOperand=b2)
+# stud = run("root.create_entity", model, ifc_class="IfcPlateType",
+#             predefined_type="STUD", name="name")
+# representation = model.createIfcShapeRepresentation(
+#         ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType="CSG",Items=[br])
+# local_placement = create_LocalPlacement(local_placements=local_placements)
+# placement = local_placement.RelativePlacement
+# representationmap = model.createIfcRepresentationMap(placement, representation)
+# stud.RepresentationMaps = [representationmap]
+
 
 # ex = builder.extrude(detail_profiles[0][0])
 # ctx = model.by_id(15)
