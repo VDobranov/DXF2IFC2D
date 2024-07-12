@@ -11,9 +11,50 @@ from ezdxf.select import Window
 from ifcopenshell import entity_instance
 
 
+def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]) -> bool:
+    """
+    Функция check_polys принимает объект LWPolyline или Polyline и список полилиний и проверяет, есть ли уже в списке полилиния с такими же суммами x- и y-координат всех её точек.
+
+    :param pline: объект LWPolyline или Polyline
+    :type pline: LWPolyline | Polyline
+    :param polys: список полилиний
+    :type polys: list[LWPolyline | Polyline]
+    :return: True, если координаты полилинии совпадают с координатами всех полилиний в списке, False в противном случае
+    :rtype: bool
+    """
+    _x_length: float = 0
+    _y_length: float = 0
+    _xx_length: float = 0
+    _yy_length: float = 0
+    _points: list[Sequence[float]] = []
+    if isinstance(pline, LWPolyline):
+        _points = pline.get_points("xy")
+    else:
+        _points = list(pline.points())
+    _min_x, _min_y = get_min_coords(pline)
+    _x_length = round(sum(p[0]-_min_x for p in _points), 3)
+    _y_length = round(sum(p[1]-_min_y for p in _points), 3)
+    for p in polys:
+        if isinstance(p, LWPolyline):
+            _points = p.get_points("xy")
+        else:
+            _points = list(p.points())
+        _min_x, _min_y = get_min_coords(p)
+        _xx_length = round(sum(p[0]-_min_x for p in _points), 3)
+        _yy_length = round(sum(p[1]-_min_y for p in _points), 3)
+        if [_x_length, _y_length] == [_xx_length, _yy_length]:
+            return True
+    return False
+
+
 def get_min_coords(pline: LWPolyline | Polyline) -> tuple[float, float]:
     """
-    Функция get_min_coords принимает объект LWPolyline и возвращает кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты.
+    Функция get_min_coords принимает объект LWPolyline или Polyline и возвращает кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты.
+
+    :param pline: объект LWPolyline или Polyline
+    :type pline: LWPolyline | Polyline
+    :return: кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты
+    :rtype: tuple[float, float]
     """
     _points: list[Sequence[float]] = []
     if isinstance(pline, LWPolyline):
@@ -28,7 +69,12 @@ def get_min_coords(pline: LWPolyline | Polyline) -> tuple[float, float]:
 
 def get_max_coords(pline: LWPolyline | Polyline) -> tuple[float, float]:
     """
-    Функция get_max_coords принимает объект LWPolyline и возвращает кортеж из двух чисел: максимальной x-координаты и максимальной y-координаты.
+    Функция get_min_coords принимает объект LWPolyline или Polyline и возвращает кортеж из двух чисел: максимальной x-координаты и максимальной y-координаты.
+
+    :param pline: объект LWPolyline или Polyline
+    :type pline: LWPolyline | Polyline
+    :return: кортеж из двух чисел: максимальной x-координаты и максимальной y-координаты
+    :rtype: tuple[float, float]
     """
     _points: list[Sequence[float]] = []
     if isinstance(pline, LWPolyline):
@@ -41,12 +87,21 @@ def get_max_coords(pline: LWPolyline | Polyline) -> tuple[float, float]:
     return _x, _y
 
 
-def nullify_coords(pline: LWPolyline | Polyline, x: float, y: float) -> None:
+def nullify_coords(pline: LWPolyline | Polyline, x: float, y: float) -> LWPolyline | Polyline:
     """
-    Функция nullify_coords принимает объект LWPolyline и два числа (x и y) и нормализует координаты объекта LWPolyline, вычитая x и y из каждого x-координаты и y-координаты соответственно.
+    Функция nullify_coords принимает объект LWPolyline или Polyline и два числа (x и y) и нормализует координаты объекта LWPolyline, вычитая x и y из каждого x-координаты и y-координаты соответственно.
+
+    :param pline: объект LWPolyline или Polyline
+    :type pline: LWPolyline | Polyline
+    :param x: число, которое вычитается из каждой x-координаты
+    :type x: float
+    :param y: число, которое вычитается из каждой y-координаты
+    :type y: float
+    :return: None
+    :rtype: None
     """
-    ucs = ezdxf.math.UCS(origin=(-x,-y,0))
-    pline.transform(ucs.matrix)
+    ucs = ezdxf.math.UCS(origin=(-x, -y, 0))
+    return pline.transform(ucs.matrix)
 
 
 def group_polys_by_details(
@@ -58,6 +113,19 @@ def group_polys_by_details(
 ) -> list[LWPolyline | Polyline]:
     """
     Функция группирует полилинии, попавшие в описываемый прямоугольник вокруг рассматриваемой полилинии.
+
+    :param poly: полилиния, вокруг которой группируются другие полилинии
+    :type poly: LWPolyline | Polyline
+    :param msp: объект Modelspace, в котором ищут полилинии
+    :type msp: Modelspace
+    :param blue_polys: список полилиний, которые должны быть найдены
+    :type blue_polys: list[LWPolyline | Polyline]
+    :param green_polys: список полилиний, которые должны быть найдены
+    :type green_polys: list[LWPolyline | Polyline]
+    :param lblue_polys: список полилиний, которые должны быть найдены
+    :type lblue_polys: list[LWPolyline | Polyline]
+    :return: список полилиний, попавших в описываемый прямоугольник вокруг рассматриваемой полилинии
+    :rtype: list[LWPolyline | Polyline]
     """
     maxs: tuple[float, float] = get_max_coords(poly)
     mins: tuple[float, float] = get_min_coords(poly)
@@ -119,6 +187,11 @@ def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[flo
 def convert_poly_to_PointList(poly: LWPolyline | Polyline) -> tuple[list, list]:
     """
     Функция преобразует полилинию в список точек с указанием, какие точки являются вершинами дуг.
+
+    :param poly: полилиния, которую нужно преобразовать
+    :type poly: LWPolyline | Polyline
+    :return: список точек и список индексов точек, являющихся вершинами дуг
+    :rtype: tuple[list, list]
     """
     ifc_points: list[tuple[float, float]] = []
     arc_middles: list[int] = []
@@ -148,16 +221,33 @@ def convert_detail_polys_to_Profiles(
         lblue_polys: list[LWPolyline | Polyline],
         green_polys: list[LWPolyline | Polyline],
         yellow_polys: list[LWPolyline | Polyline],
+        name: str = ""
 ) -> list[entity_instance]:
     """
     Функция преобразует полилинии в профили.
+
+    :param polys: список полилиний, которые нужно преобразовать
+    :type polys: list[LWPolyline | Polyline]
+    :param builder: объект, который создает профили
+    :type builder: entity_instance
+    :param blue_polys: список полилиний, которые должны быть частью профиля
+    :type blue_polys: list[LWPolyline | Polyline]
+    :param lblue_polys: список полилиний, которые должны быть частью профиля
+    :type lblue_polys: list[LWPolyline | Polyline]
+    :param green_polys: список полилиний, которые должны быть частью профиля
+    :type green_polys: list[LWPolyline | Polyline]
+    :param yellow_polys: список полилиний, которые должны быть частью профиля
+    :type yellow_polys: list[LWPolyline | Polyline]
+    :param name: имя профиля
+    :type name: str
+    :return: список профилей
+    :rtype: list[entity_instance]
     """
     profiles: list[entity_instance] = []
     blue_curves: dict[str, entity_instance] = dict()
     lblue_curves: dict[str, entity_instance] = dict()
     green_curves: dict[str, entity_instance] = dict()
     yellow_curves: dict[str, entity_instance] = dict()
-    name: str = ""
     for p in polys:
         ifc_points, arc_middles = convert_poly_to_PointList(p)
         curve = builder.polyline(
@@ -165,7 +255,6 @@ def convert_detail_polys_to_Profiles(
         curve.SelfIntersect = False
         if p in blue_polys:
             blue_curves[p.dxf.handle] = curve
-            name = p.dxf.handle
         elif p in lblue_polys:
             lblue_curves[p.dxf.handle] = curve
         elif p in green_polys:

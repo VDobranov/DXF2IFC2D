@@ -1,4 +1,4 @@
-from src.dxf import get_min_coords, get_max_coords, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
+from src.dxf import check_polys, get_min_coords, get_max_coords, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
 
 import sys
 
@@ -14,8 +14,9 @@ from ifcopenshell.util import representation, shape_builder
 
 from pprint import pprint
 
-DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
+DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
 # DXFFILENAME: str = "tiny1"
+BLOCKNAME: str = DXFFILENAME.removeprefix("SKYLARK250_").removesuffix("_cnc")
 IFCFILENAME: str = DXFFILENAME
 DXFPATH: str = "./drawings"
 IFCPATH: str = "./models"
@@ -53,7 +54,8 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
     if _layer.color == 4:
         lblue_polys.append(e)  # type: ignore
     if _layer.color == 5:
-        blue_polys.append(e)  # type: ignore
+        if not check_polys(e, blue_polys):
+            blue_polys.append(e)  # type: ignore
 
 details_polys: list[list[LWPolyline | Polyline]] = []
 for bp in blue_polys:
@@ -78,16 +80,16 @@ for group in details_polys:
     _y = (maxs[1] - mins[1]) / 2 + mins[1]
     for ee in group:
         nullify_coords(ee, _x, _y)
+    detail_name = f"{BLOCKNAME}/{details_polys.index(group)}"
     detail_profiles.append(convert_detail_polys_to_Profiles(
         polys=group,
         builder=builder,
         blue_polys=blue_polys,
         lblue_polys=lblue_polys,
         green_polys=green_polys,
-        yellow_polys=yellow_polys
+        yellow_polys=yellow_polys,
+        name=detail_name
     ))
-
-
 
 
 body: entity_instance = representation.get_context(
@@ -101,27 +103,28 @@ placement3d: entity_instance = model.by_type("IfcAxis2Placement3D")[0]
 placement2d: entity_instance = model.by_type("IfcAxis2Placement2D")[0]
 
 for dir in model.by_type("IfcDirection"):
-    if list(dir.DirectionRatios) == [1,0,0]:
+    if list(dir.DirectionRatios) == [1, 0, 0]:
         dir_x: entity_instance = dir
         break
 
 for dir in model.by_type("IfcDirection"):
-    if list(dir.DirectionRatios) == [0,1,0]:
+    if list(dir.DirectionRatios) == [0, 1, 0]:
         dir_y: entity_instance = dir
         break
 
 for dir in model.by_type("IfcDirection"):
-    if list(dir.DirectionRatios) == [0,0,1]:
+    if list(dir.DirectionRatios) == [0, 0, 1]:
         dir_z: entity_instance = dir
         break
 
-def check_CartesianPoint(coords: list[float]):
-    found: bool = False
+
+def check_CartesianPoint(coords: list[float]) -> bool:
     for p in model.by_type("IfcCartesianPoint"):
         if coords == list(p.Coordinates):
-            found = True
-    return found
-        
+            return True
+    return False
+
+
 def create_CartesianPoint(coords: list[float]) -> entity_instance:
     found = check_CartesianPoint(coords)
     if found:
@@ -131,12 +134,13 @@ def create_CartesianPoint(coords: list[float]) -> entity_instance:
     else:
         return model.createIfcCartesianPoint(coords)
 
-def check_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance:
-    found: bool = False
+
+def check_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> bool:
     for p in model.by_type("IfcAxis2Placement3D"):
         if point == p.Location and dir_z == p.Axis and dir_x == p.RefDirection:
-            found = True
-    return found
+            return True
+    return False
+
 
 def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance:
     found = check_Axis2Placement3D(point, dir_z, dir_x)
@@ -146,6 +150,7 @@ def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_
                 return p
     else:
         return model.createIfcAxis2Placement3D(point, dir_z, dir_x)
+
 
 '''
 Этот код создает словарь local_placements, где ключами являются строки, сформированные из идентификаторов объектов IfcLocalPlacement, и значениями - сами объекты IfcLocalPlacement. Он проходит по всем объектам IfcLocalPlacement в модели и для каждого объекта формирует строку, содержащую идентификаторы объектов, связанных с этим объектом IfcLocalPlacement, и добавляет эту строку в словарь как ключ с соответствующим объектом IfcLocalPlacement в качестве значения.
@@ -173,6 +178,8 @@ for lp in model.by_type("IfcLocalPlacement"):
 4. Проверяем, есть ли уже такой объект IfcLocalPlacement в словаре local_placements. Если нет, создаем новый объект и добавляем его в словарь. Если есть, берем существующий объект из словаря.
 5. Возвращаем созданный или существующий объект IfcLocalPlacement.
 '''
+
+
 def create_LocalPlacement(
         local_placements: dict[str, entity_instance],
         placement_rel: entity_instance | None = None,
@@ -204,7 +211,7 @@ def create_IfcExtrudedAreaSolid(
         sweptArea: entity_instance,
         depth: float,
         placement: entity_instance | None = None
-        ) -> entity_instance:
+) -> entity_instance:
     return model.createIfcExtrudedAreaSolid(sweptArea, placement, dir_z, depth)
 
 
@@ -213,24 +220,31 @@ def create_PlateType(profiles: list[entity_instance], name: str):
     _sheet: entity_instance = None
     for profile in profiles:
         if "cut" in profile.ProfileName:
-            _point: entity_instance = create_CartesianPoint([0.,0.,THICKNESS/2])
-            _placement: entity_instance = create_Axis2Placement3D(_point, dir_z, dir_x)
-            _cuts.append(create_IfcExtrudedAreaSolid(sweptArea=profile, depth=THICKNESS/2+1, placement=_placement))
+            _point: entity_instance = create_CartesianPoint(
+                [0., 0., THICKNESS/2])
+            _placement: entity_instance = create_Axis2Placement3D(
+                _point, dir_z, dir_x)
+            _cuts.append(create_IfcExtrudedAreaSolid(
+                sweptArea=profile, depth=THICKNESS/2+1, placement=_placement))
         else:
-            _sheet = create_IfcExtrudedAreaSolid(sweptArea=profile, depth=THICKNESS)
+            _sheet = create_IfcExtrudedAreaSolid(
+                sweptArea=profile, depth=THICKNESS)
     for cut in _cuts:
-        _sheet = model.createIfcBooleanResult(Operator="DIFFERENCE", FirstOperand=_sheet, SecondOperand=cut)
+        _sheet = model.createIfcBooleanResult(
+            Operator="DIFFERENCE", FirstOperand=_sheet, SecondOperand=cut)
     if _sheet.is_a("IfcBooleanResult"):
         _rtype: str = "CSG"
     else:
         _rtype: str = "SweptSolid"
     representation = model.createIfcShapeRepresentation(
-        ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType=_rtype,Items=[_sheet])
+        ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType=_rtype, Items=[_sheet])
     local_placement = create_LocalPlacement(local_placements=local_placements)
     placement = local_placement.RelativePlacement
-    representationmap = model.createIfcRepresentationMap(placement, representation)
-    
-    plate_type = run("root.create_entity", model, ifc_class="IfcPlateType", predefined_type="PART", name=name)
+    representationmap = model.createIfcRepresentationMap(
+        placement, representation)
+
+    plate_type = run("root.create_entity", model,
+                     ifc_class="IfcPlateType", predefined_type="PART", name=name)
     plate_type.RepresentationMaps = [representationmap]
     return plate_type
 
