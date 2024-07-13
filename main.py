@@ -6,6 +6,7 @@ import ezdxf
 from ezdxf.document import Drawing, Modelspace
 from ezdxf.entities import Layer, LWPolyline, Polyline
 import ezdxf.math
+from ezdxf.addons.drawing import Frontend, RenderContext, svg, layout
 
 import ifcopenshell as ios
 from ifcopenshell import entity_instance, validate
@@ -59,13 +60,27 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
 
 details_polys: list[list[LWPolyline | Polyline]] = []
 for bp in blue_polys:
-    details_polys.append(group_polys_by_details(
+    group: list[LWPolyline | Polyline] = group_polys_by_details(
         poly=bp,
         msp=msp,
         blue_polys=blue_polys,
         green_polys=green_polys,
-        lblue_polys=lblue_polys
-    ))
+        lblue_polys=lblue_polys,
+        yellow_polys=yellow_polys
+    )
+    details_polys.append(group)
+    yellow: list[LWPolyline | Polyline] = []
+    for p in group:
+        if p in yellow_polys:
+            yellow.append(p)
+    context = RenderContext(dwg)
+    backend = svg.SVGBackend()
+    frontend = Frontend(context, backend)
+    frontend.draw_entities(yellow)
+    page = layout.Page(0, 0, layout.Units.mm, margins=layout.Margins.all(20))
+    svg_string = backend.get_string(page)
+    with open(f"{DXFPATH}/svgs/{bp.dxf.handle}.svg", "wt", encoding="utf8") as fp:
+        fp.write(svg_string)
 
 detail_profiles: list[list[entity_instance]] = []
 for group in details_polys:
@@ -246,6 +261,19 @@ def create_PlateType(profiles: list[entity_instance], name: str):
     plate_type = run("root.create_entity", model,
                      ifc_class="IfcPlateType", predefined_type="PART", name=name)
     plate_type.RepresentationMaps = [representationmap]
+    pset1 = run("pset.add_pset", model, product=plate_type,
+                name="Pset_ManufacturerTypeInformation")
+    pset2 = run("pset.add_pset", model, product=plate_type,
+                name="Pset_PlateCommon")
+    run("pset.edit_pset", model, pset=pset1, properties={
+        "ModelReference": "SKYLARK250",
+        "ModelLabel": f"{name}",
+        "AssemblyPlace": "FACTORY",
+        "OperationalDocument": "Wikihouse Design Guide"
+    })
+    run("pset.edit_pset", model, pset=pset2, properties={
+        "Status": "NEW",
+    })
     return plate_type
 
 

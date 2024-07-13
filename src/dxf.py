@@ -27,13 +27,20 @@ def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]
     _xx_length: float = 0
     _yy_length: float = 0
     _points: list[Sequence[float]] = []
+    _npoints: list[Sequence[float]] = []
     if isinstance(pline, LWPolyline):
         _points = pline.get_points("xy")
     else:
         _points = list(pline.points())
     _min_x, _min_y = get_min_coords(pline)
-    _x_length = round(sum(p[0]-_min_x for p in _points), 3)
-    _y_length = round(sum(p[1]-_min_y for p in _points), 3)
+    for pn in _points:
+        _npoints.append([
+            round(pn[0]-_min_x, 3),
+            round(pn[1]-_min_y, 3)
+        ])
+    _x_length = sum(p[0] for p in _npoints)
+    _y_length = sum(p[1] for p in _npoints)
+    print(f"{pline.dxf.handle}: {[_x_length, _y_length]}")
     for p in polys:
         if isinstance(p, LWPolyline):
             _points = p.get_points("xy")
@@ -110,6 +117,7 @@ def group_polys_by_details(
         blue_polys: list[LWPolyline | Polyline],
         green_polys: list[LWPolyline | Polyline],
         lblue_polys: list[LWPolyline | Polyline],
+        yellow_polys: list[LWPolyline | Polyline],
 ) -> list[LWPolyline | Polyline]:
     """
     Функция группирует полилинии, попавшие в описываемый прямоугольник вокруг рассматриваемой полилинии.
@@ -132,7 +140,7 @@ def group_polys_by_details(
     window: Window = select.Window(mins, maxs)
     group: list[LWPolyline | Polyline] = []
     for e in select.bbox_overlap(window, msp):
-        if e not in blue_polys and e not in green_polys and e not in lblue_polys:
+        if e not in blue_polys and e not in green_polys and e not in lblue_polys and e not in yellow_polys:
             continue
         if isinstance(e, LWPolyline | Polyline):
             group.append(e)
