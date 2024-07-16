@@ -4,11 +4,13 @@ from typing import Sequence
 import ezdxf
 import ezdxf.math
 from ezdxf import select
-from ezdxf.document import Modelspace
-from ezdxf.entities import LWPolyline, Polyline
+from ezdxf.layouts.layout import Modelspace
+from ezdxf.entities.lwpolyline import LWPolyline
+from ezdxf.entities.polyline import Polyline
 from ezdxf.select import Window
 
 from ifcopenshell import entity_instance
+from ifcopenshell.util.shape_builder import ShapeBuilder
 
 
 def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]) -> bool:
@@ -31,7 +33,7 @@ def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]
     if isinstance(pline, LWPolyline):
         _points = pline.get_points("xy")
     else:
-        _points = list(pline.points())
+        _points = list(*pline.points())
     _min_x, _min_y = get_min_coords(pline)
     for pn in _points:
         _npoints.append([
@@ -45,7 +47,7 @@ def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]
         if isinstance(p, LWPolyline):
             _points = p.get_points("xy")
         else:
-            _points = list(p.points())
+            _points = list(*p.points())
         _min_x, _min_y = get_min_coords(p)
         _xx_length = round(sum(p[0]-_min_x for p in _points), 3)
         _yy_length = round(sum(p[1]-_min_y for p in _points), 3)
@@ -161,8 +163,8 @@ def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[flo
     x1, y1 = p1[0], p1[1]
     x2, y2 = p2[0], p2[1]
 
-    center: tuple[float, float] = ezdxf.math.bulge_center(
-        (x1, y1), (x2, y2), p1[4])
+    center: list[float] = list(ezdxf.math.bulge_center(
+        (x1, y1), (x2, y2), p1[4]))
     xc, yc = center[0], center[1]
     radius: float = ezdxf.math.bulge_radius((x1, y1), (x2, y2), p1[4])
     alpha: float = 0
@@ -224,7 +226,7 @@ def convert_poly_to_PointList(poly: LWPolyline | Polyline) -> tuple[list, list]:
 
 def convert_detail_polys_to_Profiles(
         polys: list[LWPolyline | Polyline],
-        builder: entity_instance,
+        builder: ShapeBuilder,
         blue_polys: list[LWPolyline | Polyline],
         lblue_polys: list[LWPolyline | Polyline],
         green_polys: list[LWPolyline | Polyline],

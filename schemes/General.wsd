@@ -35,11 +35,11 @@ end
 start
 :DXF<
 :Анализ слоёв в DXF;
-:Сбор всех LWPOLYLINE;
-' :LWPOLYLINE для формирования тела пластины;
-' :Список LWPOLYLINE для сквозного вырезания пластины;
-' :Список LWPOLYLINE для половинного вырезания пластины;
-while (Перебор всех LWPOLYLINE)
+:Сбор всех LWPOLYLINE | POLYLINE;
+' :LWPOLYLINE | POLYLINE для формирования тела пластины;
+' :Список LWPOLYLINE | POLYLINE для сквозного вырезания пластины;
+' :Список LWPOLYLINE | POLYLINE для половинного вырезания пластины;
+while (Перебор всех LWPOLYLINE | POLYLINE)
 	:Выборка точек;
 	:Конвертация выборки точек в IfcCartesianPointList2D с учётом промежуточных точек в случае скруглений;
 	:Формирование IfcLineIndex и IfcArcIndex на основе IfcCartesianPointList2D;

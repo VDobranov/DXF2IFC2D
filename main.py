@@ -1,20 +1,27 @@
+
 from src.dxf import check_polys, get_min_coords, get_max_coords, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
 
 import sys
 
 import ezdxf
-from ezdxf.document import Drawing, Modelspace
-from ezdxf.entities import Layer, LWPolyline, Polyline
+from ezdxf.filemanagement import readfile
+from ezdxf.lldxf.const import DXFStructureError
+from ezdxf.document import Drawing
+from ezdxf.layouts.layout import Modelspace
+from ezdxf.entities.layer import Layer
+from ezdxf.entities.lwpolyline import LWPolyline
+from ezdxf.entities.polyline import Polyline
 import ezdxf.math
-from ezdxf.addons.drawing import Frontend, RenderContext, svg, layout
 
 import ifcopenshell as ios
 from ifcopenshell import entity_instance, validate
 from ifcopenshell.api import run
-from ifcopenshell.util import representation, shape_builder
+from ifcopenshell.util import representation
+from ifcopenshell.util.shape_builder import ShapeBuilder
 
 from pprint import pprint
 
+# DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
 DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
 # DXFFILENAME: str = "tiny1"
 BLOCKNAME: str = DXFFILENAME.removeprefix("SKYLARK250_").removesuffix("_cnc")
@@ -24,14 +31,14 @@ IFCPATH: str = "./models"
 THICKNESS: float = 18
 
 model = ios.open(f"{IFCPATH}/TEMPLATE.ifc")
-builder = shape_builder.ShapeBuilder(model)
+builder = ShapeBuilder(model)
 
 try:
-    dwg: Drawing = ezdxf.readfile(f"{DXFPATH}/{DXFFILENAME}.dxf")
+    dwg: Drawing = readfile(f"{DXFPATH}/{DXFFILENAME}.dxf")
 except IOError:
     print(f"File {DXFFILENAME} not found.")
     sys.exit(1)
-except ezdxf.DXFStructureError:
+except DXFStructureError:
     print(f"File {DXFFILENAME} is not a DXF file.")
     sys.exit(2)
 
@@ -55,9 +62,10 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
     if _layer.color == 4:
         lblue_polys.append(e)  # type: ignore
     if _layer.color == 5:
-        if not check_polys(e, blue_polys):
-            blue_polys.append(e)  # type: ignore
+        # if not check_polys(e, blue_polys):
+        blue_polys.append(e)  # type: ignore
 
+# reader = easyocr.Reader(['en'])
 details_polys: list[list[LWPolyline | Polyline]] = []
 for bp in blue_polys:
     group: list[LWPolyline | Polyline] = group_polys_by_details(
@@ -69,18 +77,24 @@ for bp in blue_polys:
         yellow_polys=yellow_polys
     )
     details_polys.append(group)
-    yellow: list[LWPolyline | Polyline] = []
-    for p in group:
-        if p in yellow_polys:
-            yellow.append(p)
-    context = RenderContext(dwg)
-    backend = svg.SVGBackend()
-    frontend = Frontend(context, backend)
-    frontend.draw_entities(yellow)
-    page = layout.Page(0, 0, layout.Units.mm, margins=layout.Margins.all(20))
-    svg_string = backend.get_string(page)
-    with open(f"{DXFPATH}/svgs/{bp.dxf.handle}.svg", "wt", encoding="utf8") as fp:
-        fp.write(svg_string)
+    # yellow: list[LWPolyline | Polyline] = []
+    # for p in group:
+    #     if p in yellow_polys:
+    #         yellow.append(p)
+    # context = RenderContext(dwg)
+    # # backend = svg.SVGBackend()
+    # backend = pymupdf.PyMuPdfBackend()
+    # frontend = Frontend(context, backend)
+    # frontend.draw_entities(yellow)
+    # page = layout.Page(0, 0, layout.Units.mm, margins=layout.Margins.all(20))
+    # # svg_string = backend.get_string(page)
+    # # with open(f"{DXFPATH}/svgs/{bp.dxf.handle}.svg", "wt", encoding="utf8") as fp:
+    # #     fp.write(svg_string)
+    # png_bytes = backend.get_pixmap_bytes(page, fmt="png", dpi=72)
+    # result = reader.readtext(png_bytes, detail = 0, rotation_info=[0, 90, 180 ,270])
+    # print(result)
+    # with open(f"{DXFPATH}/pngs/{bp.dxf.handle}.png", "wb") as fp:
+    #     fp.write(png_bytes)
 
 detail_profiles: list[list[entity_instance]] = []
 for group in details_polys:
@@ -107,7 +121,7 @@ for group in details_polys:
     ))
 
 
-body: entity_instance = representation.get_context(
+body: entity_instance | None = representation.get_context(
     model, "Model", "Body", "MODEL_VIEW")
 history: entity_instance = model.by_type("IfcOwnerHistory")[0]
 site: entity_instance = model.by_type('IfcSite')[0]
@@ -140,7 +154,7 @@ def check_CartesianPoint(coords: list[float]) -> bool:
     return False
 
 
-def create_CartesianPoint(coords: list[float]) -> entity_instance:
+def create_CartesianPoint(coords: list[float]) -> entity_instance: # type: ignore
     found = check_CartesianPoint(coords)
     if found:
         for p in model.by_type("IfcCartesianPoint"):
@@ -157,7 +171,7 @@ def check_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x
     return False
 
 
-def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance:
+def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance: # type: ignore
     found = check_Axis2Placement3D(point, dir_z, dir_x)
     if found:
         for p in model.by_type("IfcAxis2Placement3D"):
@@ -232,7 +246,7 @@ def create_IfcExtrudedAreaSolid(
 
 def create_PlateType(profiles: list[entity_instance], name: str):
     _cuts: list[entity_instance] = []
-    _sheet: entity_instance = None
+    _sheet: entity_instance = entity_instance(e)
     for profile in profiles:
         if "cut" in profile.ProfileName:
             _point: entity_instance = create_CartesianPoint(
