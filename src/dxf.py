@@ -15,7 +15,7 @@ from ifcopenshell.util.shape_builder import ShapeBuilder
 
 def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]) -> bool:
     """
-    Функция check_polys принимает объект LWPolyline или Polyline и список полилиний и проверяет, есть ли уже в списке полилиния с такими же суммами x- и y-координат всех её точек.
+    Функция check_polys принимает объект LWPolyline или Polyline и список полилиний и проверяет, есть ли уже в списке полилиния с такой же длиной (без учёта арок)
 
     :param pline: объект LWPolyline или Polyline
     :type pline: LWPolyline | Polyline
@@ -24,34 +24,35 @@ def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]
     :return: True, если координаты полилинии совпадают с координатами всех полилиний в списке, False в противном случае
     :rtype: bool
     """
-    _x_length: float = 0
-    _y_length: float = 0
-    _xx_length: float = 0
-    _yy_length: float = 0
+    _length: float = 0
+    _llength: float = 0
     _points: list[Sequence[float]] = []
-    _npoints: list[Sequence[float]] = []
     if isinstance(pline, LWPolyline):
         _points = pline.get_points("xy")
     else:
-        _points = list(*pline.points())
-    _min_x, _min_y = get_min_coords(pline)
-    for pn in _points:
-        _npoints.append([
-            round(pn[0]-_min_x, 3),
-            round(pn[1]-_min_y, 3)
-        ])
-    _x_length = sum(p[0] for p in _npoints)
-    _y_length = sum(p[1] for p in _npoints)
-    print(f"{pline.dxf.handle}: {[_x_length, _y_length]}")
+        for pnt in pline.points():
+            _points.append([pnt[0], pnt[1]])
+
+    def vector_length(p1: Sequence[float], p2: Sequence[float]) -> float:
+        return math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)
+    for i in range(len(_points)):
+        j = i+1 if i < len(_points)-1 else 0
+        _length += vector_length(_points[i], _points[j])
     for p in polys:
+        _llength = 0
+        _points = []
         if isinstance(p, LWPolyline):
             _points = p.get_points("xy")
         else:
-            _points = list(*p.points())
-        _min_x, _min_y = get_min_coords(p)
-        _xx_length = round(sum(p[0]-_min_x for p in _points), 3)
-        _yy_length = round(sum(p[1]-_min_y for p in _points), 3)
-        if [_x_length, _y_length] == [_xx_length, _yy_length]:
+            for pnt in p.points():
+                _points.append([pnt[0], pnt[1]])
+        for i in range(len(_points)):
+            j = i+1 if i < len(_points)-1 else 0
+            _llength += vector_length(_points[i], _points[j])
+        _length = round(_length, 3)
+        _llength = round(_llength, 3)
+        print(f"{_length} - {_llength}")
+        if _length == _llength:
             return True
     return False
 

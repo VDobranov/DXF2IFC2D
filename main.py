@@ -2,6 +2,7 @@
 from src.dxf import check_polys, get_min_coords, get_max_coords, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
 
 import sys
+import numpy as np
 
 import ezdxf
 from ezdxf.filemanagement import readfile
@@ -14,9 +15,12 @@ from ezdxf.entities.polyline import Polyline
 import ezdxf.math
 
 import ifcopenshell as ios
+import ifcopenshell.geom
 from ifcopenshell import entity_instance, validate
 from ifcopenshell.api import run
+from ifcopenshell.geom import ShapeType
 from ifcopenshell.util import representation
+from ifcopenshell.util.shape import get_footprint_perimeter, get_vertices, get_edges
 from ifcopenshell.util.shape_builder import ShapeBuilder
 
 from pprint import pprint
@@ -62,8 +66,8 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
     if _layer.color == 4:
         lblue_polys.append(e)  # type: ignore
     if _layer.color == 5:
-        # if not check_polys(e, blue_polys):
-        blue_polys.append(e)  # type: ignore
+        if not check_polys(e, blue_polys): # type: ignore
+            blue_polys.append(e) # type: ignore
 
 # reader = easyocr.Reader(['en'])
 details_polys: list[list[LWPolyline | Polyline]] = []
