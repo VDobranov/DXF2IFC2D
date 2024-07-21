@@ -153,16 +153,21 @@ def nullify_coords(pline: LWPolyline | Polyline, x: float, y: float) -> LWPolyli
     return pline.transform(ucs.matrix)
 
 
-def convert_letter_to_poly(pline: LWPolyline | Polyline, msp: Modelspace) -> LWPolyline | Polyline:
+def convert_letter_to_poly(pline: LWPolyline | Polyline, msp: Modelspace, offset: float = 1.) -> LWPolyline | Polyline:
+    '''
+    Функция convert_letter_to_poly преобразует открытую полилинию в закрытую полилинию, очерченную вокруг исходной с заданным отступом.
+    '''
+    # if pline.is_closed:
+        # return pline # если полилиния закрыта, ничего не делаем
     _points: list[Sequence[float]] = []
     if isinstance(pline, LWPolyline):
         _points = pline.get_points(format="xy")
     else:
         for v in pline.vertices:
             _points.append(v.format("xy"))
-    offset_points1: list[Vec2] = list(offset_vertices_2d(_points, offset=1, closed=False))
-    offset_points2: list[Vec2] = list(offset_vertices_2d(_points, offset=-1, closed=False))
-    offset_points2.reverse()
+    offset_points1: list[Vec2] = list(offset_vertices_2d(_points, offset=offset, closed=False)) # отступ от исходной полилинии в одну сторону
+    offset_points2: list[Vec2] = list(offset_vertices_2d(_points, offset=-offset, closed=False)) # отступ от исходной полилинии в другую сторону
+    offset_points2.reverse() # разворот другой стороны, чтобы продолжить последовательность задания конченой полилинии
     letter = msp.add_lwpolyline(points=(offset_points1 + offset_points2), close=True)
     letter.dxf.layer = pline.dxf.layer
     return letter

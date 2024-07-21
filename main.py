@@ -20,13 +20,14 @@ from ifcopenshell.util.shape_builder import ShapeBuilder
 from pprint import pprint
 
 DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
-DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
+# DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
 # DXFFILENAME: str = "tiny1"
 BLOCKNAME: str = DXFFILENAME.removeprefix("SKYLARK250_").removesuffix("_cnc")
 IFCFILENAME: str = DXFFILENAME
 DXFPATH: str = "./drawings"
 IFCPATH: str = "./models"
-THICKNESS: float = 18
+THICKNESS: float = 18 # толщина листа, мм
+BEAT: float = 4 # диаметр сверла, мм
 
 model = ios.open(f"{IFCPATH}/TEMPLATE.ifc")
 builder = ShapeBuilder(model)
@@ -54,8 +55,9 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
     if _layer.color == 1:
         red_polys.append(e)  # type: ignore
     if _layer.color == 2:
-        letter: LWPolyline | Polyline = convert_letter_to_poly(e, msp) # type: ignore
-        yellow_polys.append(letter)
+        # letter: LWPolyline | Polyline = convert_letter_to_poly(e, msp, BEAT/2) # type: ignore
+        # yellow_polys.append(letter)
+        yellow_polys.append(e) # type: ignore
     if _layer.color == 3:
         green_polys.append(e)  # type: ignore
     if _layer.color == 4:
