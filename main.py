@@ -1,7 +1,9 @@
 
-from src.dxf import get_poly_length, get_min_coords, get_max_coords, get_poly_length, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles, convert_letter_to_poly
+
+from src.dxf import get_poly_length, get_min_coords, get_max_coords, get_poly_length, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
 
 import sys
+import time
 
 from ezdxf.filemanagement import readfile
 from ezdxf.lldxf.const import DXFStructureError
@@ -19,15 +21,19 @@ from ifcopenshell.util.shape_builder import ShapeBuilder
 
 from pprint import pprint
 
+start = time.time()
+print('Старт: ' + time.ctime(start))
+
 DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
-# DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
+DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
+DXFFILENAME: str = "SKYLARK250_END-S-0_cnc"
 # DXFFILENAME: str = "tiny1"
 BLOCKNAME: str = DXFFILENAME.removeprefix("SKYLARK250_").removesuffix("_cnc")
 IFCFILENAME: str = DXFFILENAME
 DXFPATH: str = "./drawings"
 IFCPATH: str = "./models"
-THICKNESS: float = 18 # толщина листа, мм
-BEAT: float = 4 # диаметр сверла, мм
+THICKNESS: float = 18  # толщина листа, мм
+BEAT: float = 4  # диаметр сверла, мм
 
 model = ios.open(f"{IFCPATH}/TEMPLATE.ifc")
 builder = ShapeBuilder(model)
@@ -57,7 +63,7 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
     if _layer.color == 2:
         # letter: LWPolyline | Polyline = convert_letter_to_poly(e, msp, BEAT/2) # type: ignore
         # yellow_polys.append(letter)
-        yellow_polys.append(e) # type: ignore
+        yellow_polys.append(e)  # type: ignore
     if _layer.color == 3:
         green_polys.append(e)  # type: ignore
     if _layer.color == 4:
@@ -79,12 +85,12 @@ for bp in blue_polys:
 
 
 detail_profiles: list[list[entity_instance]] = []
-detail_data: dict[str, list[float | int]] = {} # словарь с деталями, в котором: имя детали, её длина и требуемое количество
+# словарь с деталями, в котором: имя детали, её длина и требуемое количество
+detail_data: dict[str, list[float | int]] = {}
 detail_num: int = 0
 for group in details_polys:
     brk: bool = False
-    group_length: float = round(sum(get_poly_length(poly)
-                                for poly in group), 3)
+    group_length: float = round(sum(get_poly_length(poly) for poly in group), 3)
     for k, v in detail_data.items():
         if v[0] == group_length:
             v[1] += 1
@@ -116,8 +122,7 @@ for group in details_polys:
     ))
 
 
-body: entity_instance | None = representation.get_context(
-    model, "Model", "Body", "MODEL_VIEW")
+body: entity_instance | None = representation.get_context(model, "Model", "Body", "MODEL_VIEW")
 history: entity_instance = model.by_type("IfcOwnerHistory")[0]
 site: entity_instance = model.by_type('IfcSite')[0]
 storey: entity_instance = model.by_type('IfcBuildingStorey')[0]
@@ -157,7 +162,7 @@ def check_CartesianPoint(coords: list[float]) -> bool:
     return False
 
 
-def create_CartesianPoint(coords: list[float]) -> entity_instance: # type: ignore
+def create_CartesianPoint(coords: list[float]) -> entity_instance:  # type: ignore
     """
     Функция create_CartesianPoint создает объект IfcCartesianPoint с заданными координатами.
 
@@ -259,8 +264,7 @@ def create_LocalPlacement(
     name: str = f"{name1}/{name2}"
     if name not in local_placements:
         placement = create_Axis2Placement3D(point, dir_z, dir_x)
-        local_placement = model.createIfcLocalPlacement(
-            placement_rel, placement)
+        local_placement = model.createIfcLocalPlacement(placement_rel, placement)
         local_placements[name] = local_placement
     else:
         local_placement = local_placements[name]
@@ -284,25 +288,17 @@ def create_PlateType(profiles: list[entity_instance], name: str):
     _sheet: entity_instance = entity_instance(e)
     for profile in profiles:
         if "cut" in profile.ProfileName:
-            _point: entity_instance = create_CartesianPoint(
-                [0., 0., THICKNESS/2])
-            _placement: entity_instance = create_Axis2Placement3D(
-                _point, dir_z, dir_x)
-            _cuts.append(create_IfcExtrudedAreaSolid(
-                sweptArea=profile, depth=THICKNESS/2+1, placement=_placement))
+            _point: entity_instance = create_CartesianPoint([0., 0., THICKNESS/2])
+            _placement: entity_instance = create_Axis2Placement3D(_point, dir_z, dir_x)
+            _cuts.append(create_IfcExtrudedAreaSolid(sweptArea=profile, depth=THICKNESS/2+1, placement=_placement))
         elif "letter" in profile.ProfileName:
-            _point: entity_instance = create_CartesianPoint(
-                [0., 0., THICKNESS-1.])
-            _placement: entity_instance = create_Axis2Placement3D(
-                _point, dir_z, dir_x)
-            _cuts.append(create_IfcExtrudedAreaSolid(
-                sweptArea=profile, depth=2, placement=_placement))
+            _point: entity_instance = create_CartesianPoint([0., 0., THICKNESS-1.])
+            _placement: entity_instance = create_Axis2Placement3D(_point, dir_z, dir_x)
+            _cuts.append(create_IfcExtrudedAreaSolid(sweptArea=profile, depth=2, placement=_placement))
         else:
-            _sheet = create_IfcExtrudedAreaSolid(
-                sweptArea=profile, depth=THICKNESS)
+            _sheet = create_IfcExtrudedAreaSolid(sweptArea=profile, depth=THICKNESS)
     for cut in _cuts:
-        _sheet = model.createIfcBooleanResult(
-            Operator="DIFFERENCE", FirstOperand=_sheet, SecondOperand=cut)
+        _sheet = model.createIfcBooleanResult(Operator="DIFFERENCE", FirstOperand=_sheet, SecondOperand=cut)
     if _sheet.is_a("IfcBooleanResult"):
         _rtype: str = "CSG"
     else:
@@ -311,11 +307,9 @@ def create_PlateType(profiles: list[entity_instance], name: str):
         ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType=_rtype, Items=[_sheet])
     local_placement = create_LocalPlacement(local_placements=local_placements)
     placement = local_placement.RelativePlacement
-    representationmap = model.createIfcRepresentationMap(
-        placement, representation)
+    representationmap = model.createIfcRepresentationMap(placement, representation)
 
-    plate_type = run("root.create_entity", model,
-                     ifc_class="IfcPlateType", predefined_type="PART", name=name)
+    plate_type = run("root.create_entity", model, ifc_class="IfcPlateType", predefined_type="PART", name=name)
     plate_type.RepresentationMaps = [representationmap]
     pset1 = run("pset.add_pset", model, product=plate_type,
                 name="Pset_ManufacturerTypeInformation")
@@ -333,6 +327,17 @@ def create_PlateType(profiles: list[entity_instance], name: str):
     return plate_type
 
 
+def create_Plate(name: str = "Default Name", type: entity_instance | None = None):
+    plate = run("root.create_entity", model, ifc_class="IfcPlate")
+    run("geometry.edit_object_placement", model, product=plate)
+    run("spatial.assign_container", model, products=[plate], relating_structure=storey)
+    if type:
+        run("type.assign_type", model, related_objects=[plate], relating_type=type)
+        plate.Name = type.Name
+    else:
+        plate.Name = name
+    return plate
+
 # def create_FoundationStud(L, l, R, d, l0) -> entity_instance:
 #     stud_type = create_FoundationStudType(L, l, R, d, l0)
 #     stud = run("root.create_entity", model, ifc_class="IfcMechanicalFastener")
@@ -348,8 +353,16 @@ def create_PlateType(profiles: list[entity_instance], name: str):
 #     })
 #     return stud
 
+
 for p in detail_profiles:
-    create_PlateType(p, p[0].ProfileName)
+    name = p[0].ProfileName
+    type = create_PlateType(p, name)
+    amount = detail_data[name][1]
+    for i in range(int(amount)):
+        name2 = name
+        if amount > 1:
+            name2 = f"{name}_{i+1}"
+        plate = create_Plate(name=name2, type=type)
 # print(*local_placements.keys())
 
 # eas = model.by_type("IfcExtrudedAreaSolid")
@@ -363,8 +376,7 @@ for p in detail_profiles:
 # br = model.createIfcBooleanResult(Operator="DIFFERENCE", FirstOperand=b1, SecondOperand=b2)
 # stud = run("root.create_entity", model, ifc_class="IfcPlateType",
 #             predefined_type="STUD", name="name")
-# representation = model.createIfcShapeRepresentation(
-#         ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType="CSG",Items=[br])
+# representation = model.createIfcShapeRepresentation(ContextOfItems=body, RepresentationIdentifier="Body", RepresentationType="CSG",Items=[br])
 # local_placement = create_LocalPlacement(local_placements=local_placements)
 # placement = local_placement.RelativePlacement
 # representationmap = model.createIfcRepresentationMap(placement, representation)
@@ -401,3 +413,9 @@ model.write(f"{IFCPATH}/{IFCFILENAME}.ifc")
 logger = validate.json_logger()
 validate.validate(model, logger, express_rules=True)  # type: ignore
 pprint(logger.statements)
+
+
+finish = time.time()
+print('Финиш: ' + time.ctime(finish))
+spent_time = time.strftime("%H:%M:%S", time.gmtime(finish - start))
+print('Затрачено времени: ' + spent_time)

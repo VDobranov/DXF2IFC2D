@@ -45,7 +45,8 @@ def get_arc_length(p1: Sequence[float], p2: Sequence[float], pc: Sequence[float]
     """
     r = get_vector_length(p1, pc)  # длина радиуса
     c = get_vector_length(p1, p2)  # длина хорды
-    a = round(c / (2 * r), TOL) # значение синуса половинного угла между векторами, которые начинаются в центре окружности дуги, а заканчиваются в точках хорды
+    # значение синуса половинного угла между векторами, которые начинаются в центре окружности дуги, а заканчиваются в точках хорды
+    a = round(c / (2 * r), TOL)
     return round(2 * math.asin(a) * r, TOL)
 
 
@@ -158,16 +159,18 @@ def convert_letter_to_poly(pline: LWPolyline | Polyline, msp: Modelspace, offset
     Функция convert_letter_to_poly преобразует открытую полилинию в закрытую полилинию, очерченную вокруг исходной с заданным отступом.
     '''
     # if pline.is_closed:
-        # return pline # если полилиния закрыта, ничего не делаем
+    # return pline # если полилиния закрыта, ничего не делаем
     _points: list[Sequence[float]] = []
     if isinstance(pline, LWPolyline):
         _points = pline.get_points(format="xy")
     else:
         for v in pline.vertices:
             _points.append(v.format("xy"))
-    offset_points1: list[Vec2] = list(offset_vertices_2d(_points, offset=offset, closed=False)) # отступ от исходной полилинии в одну сторону
-    offset_points2: list[Vec2] = list(offset_vertices_2d(_points, offset=-offset, closed=False)) # отступ от исходной полилинии в другую сторону
-    offset_points2.reverse() # разворот другой стороны, чтобы продолжить последовательность задания конченой полилинии
+    # отступ от исходной полилинии в одну сторону
+    offset_points1: list[Vec2] = list(offset_vertices_2d(_points, offset=offset, closed=False))
+    # отступ от исходной полилинии в другую сторону
+    offset_points2: list[Vec2] = list(offset_vertices_2d(_points, offset=-offset, closed=False))
+    offset_points2.reverse()  # разворот другой стороны, чтобы продолжить последовательность задания конченой полилинии
     letter = msp.add_lwpolyline(points=(offset_points1 + offset_points2), close=True)
     letter.dxf.layer = pline.dxf.layer
     return letter
@@ -223,8 +226,7 @@ def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[flo
     x1, y1 = p1[0], p1[1]
     x2, y2 = p2[0], p2[1]
 
-    center: list[float] = list(ezdxf.math.bulge_center(
-        (x1, y1), (x2, y2), p1[4]))
+    center: list[float] = list(ezdxf.math.bulge_center((x1, y1), (x2, y2), p1[4]))
     xc, yc = center[0], center[1]
     radius: float = ezdxf.math.bulge_radius((x1, y1), (x2, y2), p1[4])
     alpha: float = 0
@@ -320,8 +322,7 @@ def convert_detail_polys_to_Profiles(
     yellow_curves: dict[str, entity_instance] = dict()
     for p in polys:
         ifc_points, arc_middles = convert_poly_to_PointList(p)
-        curve = builder.polyline(
-            ifc_points, arc_points=arc_middles, closed=True)
+        curve = builder.polyline(ifc_points, arc_points=arc_middles, closed=True)
         curve.SelfIntersect = False
         if p in blue_polys:
             blue_curves[p.dxf.handle] = curve
@@ -331,13 +332,12 @@ def convert_detail_polys_to_Profiles(
             green_curves[p.dxf.handle] = curve
         elif p in yellow_polys:
             yellow_curves[p.dxf.handle] = curve
-    profile = builder.profile(list(blue_curves.values())[0], inner_curves=list(
-        lblue_curves.values()), name=f"{name}")
+    profile = builder.profile(list(blue_curves.values())[0], inner_curves=list(lblue_curves.values()), name=f"{name}")
     profiles.append(profile)
     for k, v in green_curves.items():
         cut = builder.profile(v, name=f"{name}_cut_{k}")
         profiles.append(cut)
     for k, v in yellow_curves.items():
         letter = builder.profile(v, name=f"{name}_letter_{k}")
-        profiles.append(letter)
+        # profiles.append(letter)
     return profiles
