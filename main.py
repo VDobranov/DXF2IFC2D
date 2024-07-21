@@ -1,5 +1,5 @@
 
-from src.dxf import get_poly_length, get_min_coords, get_max_coords, get_poly_length, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
+from src.dxf import get_poly_length, get_min_coords, get_max_coords, get_poly_length, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles, convert_letter_to_poly
 
 import sys
 
@@ -19,7 +19,7 @@ from ifcopenshell.util.shape_builder import ShapeBuilder
 
 from pprint import pprint
 
-# DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
+DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
 DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
 # DXFFILENAME: str = "tiny1"
 BLOCKNAME: str = DXFFILENAME.removeprefix("SKYLARK250_").removesuffix("_cnc")
@@ -54,13 +54,13 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
     if _layer.color == 1:
         red_polys.append(e)  # type: ignore
     if _layer.color == 2:
-        yellow_polys.append(e)  # type: ignore
+        letter: LWPolyline | Polyline = convert_letter_to_poly(e, msp) # type: ignore
+        yellow_polys.append(letter)
     if _layer.color == 3:
         green_polys.append(e)  # type: ignore
     if _layer.color == 4:
         lblue_polys.append(e)  # type: ignore
     if _layer.color == 5:
-        # if not check_polys(e, blue_polys): # type: ignore
         blue_polys.append(e)  # type: ignore
 
 details_polys: list[list[LWPolyline | Polyline]] = []
@@ -77,7 +77,7 @@ for bp in blue_polys:
 
 
 detail_profiles: list[list[entity_instance]] = []
-detail_data: dict[str, list[float | int]] = {}
+detail_data: dict[str, list[float | int]] = {} # словарь с деталями, в котором: имя детали, её длина и требуемое количество
 detail_num: int = 0
 for group in details_polys:
     brk: bool = False
@@ -90,7 +90,7 @@ for group in details_polys:
     if brk:
         continue
     detail_num += 1
-    detail_name = f"{BLOCKNAME}/{detail_num}"
+    detail_name: str = f"{BLOCKNAME}/{detail_num}"
     detail_data[detail_name] = [group_length, 1]
     blue: LWPolyline | Polyline
     for ee in group:
@@ -103,7 +103,6 @@ for group in details_polys:
     _y = (maxs[1] - mins[1]) / 2 + mins[1]
     for ee in group:
         nullify_coords(ee, _x, _y)
-    # detail_name = f"{BLOCKNAME}/{details_polys.index(group)+1}"
     detail_profiles.append(convert_detail_polys_to_Profiles(
         polys=group,
         builder=builder,
@@ -142,14 +141,29 @@ for dir in model.by_type("IfcDirection"):
 
 
 def check_CartesianPoint(coords: list[float]) -> bool:
+    """
+    Функция check_CartesianPoint проверяет, существует ли уже в модели объект IfcCartesianPoint с заданными координатами.
+
+    :param coords: список координат
+    :type coords: list[float]
+    :return: True, если объект существует, False в противном случае
+    :rtype: bool
+    """
     for p in model.by_type("IfcCartesianPoint"):
         if coords == list(p.Coordinates):
             return True
     return False
 
 
-# type: ignore
-def create_CartesianPoint(coords: list[float]) -> entity_instance:
+def create_CartesianPoint(coords: list[float]) -> entity_instance: # type: ignore
+    """
+    Функция create_CartesianPoint создает объект IfcCartesianPoint с заданными координатами.
+
+    :param coords: список координат
+    :type coords: list[float]
+    :return: объект IfcCartesianPoint
+    :rtype: entity_instance
+    """
     found = check_CartesianPoint(coords)
     if found:
         for p in model.by_type("IfcCartesianPoint"):
@@ -160,6 +174,18 @@ def create_CartesianPoint(coords: list[float]) -> entity_instance:
 
 
 def check_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> bool:
+    """
+    Функция check_Axis2Placement3D проверяет, существует ли уже в модели объект IfcAxis2Placement3D с заданными координатами, направлением оси z и направлением оси x.
+
+    :param point: объект IfcCartesianPoint, представляющий координаты
+    :type point: entity_instance
+    :param dir_z: объект IfcDirection, представляющий направление оси z
+    :type dir_z: entity_instance
+    :param dir_x: объект IfcDirection, представляющий направление оси x
+    :type dir_x: entity_instance
+    :return: True, если объект существует, False в противном случае
+    :rtype: bool
+    """
     for p in model.by_type("IfcAxis2Placement3D"):
         if point == p.Location and dir_z == p.Axis and dir_x == p.RefDirection:
             return True
@@ -167,6 +193,18 @@ def check_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x
 
 
 def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance:  # type: ignore
+    '''
+    Функция create_Axis2Placement3D создает объект IfcAxis2Placement3D с заданными координатами, направлением оси z и направлением оси x. Если такой объект уже существует в модели, функция возвращает его. В противном случае, функция создает новый объект и возвращает его.
+
+    :param point: объект IfcCartesianPoint, представляющий координаты
+    :type point: entity_instance
+    :param dir_z: объект IfcDirection, представляющий направление оси z
+    :type dir_z: entity_instance
+    :param dir_x: объект IfcDirection, представляющий направление оси x
+    :type dir_x: entity_instance
+    :return: объект IfcAxis2Placement3D
+    :rtype: entity_instance
+    '''
     found = check_Axis2Placement3D(point, dir_z, dir_x)
     if found:
         for p in model.by_type("IfcAxis2Placement3D"):
@@ -250,6 +288,13 @@ def create_PlateType(profiles: list[entity_instance], name: str):
                 _point, dir_z, dir_x)
             _cuts.append(create_IfcExtrudedAreaSolid(
                 sweptArea=profile, depth=THICKNESS/2+1, placement=_placement))
+        elif "letter" in profile.ProfileName:
+            _point: entity_instance = create_CartesianPoint(
+                [0., 0., THICKNESS-1.])
+            _placement: entity_instance = create_Axis2Placement3D(
+                _point, dir_z, dir_x)
+            _cuts.append(create_IfcExtrudedAreaSolid(
+                sweptArea=profile, depth=2, placement=_placement))
         else:
             _sheet = create_IfcExtrudedAreaSolid(
                 sweptArea=profile, depth=THICKNESS)

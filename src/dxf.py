@@ -1,12 +1,13 @@
 import math
 
-from typing import Sequence
+from typing import Sequence, Iterable
 import ezdxf
 import ezdxf.math
 from ezdxf import select
-from ezdxf.layouts.layout import Modelspace
 from ezdxf.entities.lwpolyline import LWPolyline
 from ezdxf.entities.polyline import Polyline
+from ezdxf.layouts.layout import Modelspace
+from ezdxf.math import offset_vertices_2d, Vec2
 from ezdxf.select import Window
 
 from ifcopenshell import entity_instance
@@ -30,10 +31,22 @@ def get_vector_length(p1: Sequence[float], p2: Sequence[float]) -> float:
 
 
 def get_arc_length(p1: Sequence[float], p2: Sequence[float], pc: Sequence[float]):
+    """
+    Функция get_arc_length вычисляет длину дуги между двумя точками с заданной центральной точкой.
+
+    :param p1: первая точка
+    :type p1: Sequence[float]
+    :param p2: вторая точка
+    :type p2: Sequence[float]
+    :param pc: центральная точка
+    :type pc: Sequence[float]
+    :return: длина дуги
+    :rtype: float
+    """
     r = get_vector_length(p1, pc)  # длина радиуса
     c = get_vector_length(p1, p2)  # длина хорды
-    a = round(c / (2 * r), TOL)
-    return 2 * math.asin(a) * r
+    a = round(c / (2 * r), TOL) # значение синуса половинного угла между векторами, которые начинаются в центре окружности дуги, а заканчиваются в точках хорды
+    return round(2 * math.asin(a) * r, TOL)
 
 
 def get_poly_length(pline: LWPolyline | Polyline) -> float:
@@ -138,6 +151,21 @@ def nullify_coords(pline: LWPolyline | Polyline, x: float, y: float) -> LWPolyli
     """
     ucs = ezdxf.math.UCS(origin=(-x, -y, 0))
     return pline.transform(ucs.matrix)
+
+
+def convert_letter_to_poly(pline: LWPolyline | Polyline, msp: Modelspace) -> LWPolyline | Polyline:
+    _points: list[Sequence[float]] = []
+    if isinstance(pline, LWPolyline):
+        _points = pline.get_points(format="xy")
+    else:
+        for v in pline.vertices:
+            _points.append(v.format("xy"))
+    offset_points1: list[Vec2] = list(offset_vertices_2d(_points, offset=1, closed=False))
+    offset_points2: list[Vec2] = list(offset_vertices_2d(_points, offset=-1, closed=False))
+    offset_points2.reverse()
+    letter = msp.add_lwpolyline(points=(offset_points1 + offset_points2), close=True)
+    letter.dxf.layer = pline.dxf.layer
+    return letter
 
 
 def group_polys_by_details(
@@ -304,4 +332,7 @@ def convert_detail_polys_to_Profiles(
     for k, v in green_curves.items():
         cut = builder.profile(v, name=f"{name}_cut_{k}")
         profiles.append(cut)
+    for k, v in yellow_curves.items():
+        letter = builder.profile(v, name=f"{name}_letter_{k}")
+        profiles.append(letter)
     return profiles
