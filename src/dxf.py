@@ -10,11 +10,27 @@ from ezdxf.layouts.layout import Modelspace
 from ezdxf.math import offset_vertices_2d, Vec2
 from ezdxf.select import Window
 
+import shapely # type: ignore
+
 from ifcopenshell import entity_instance
 from ifcopenshell.util.shape_builder import ShapeBuilder
 
 TOL: int = 6
 
+
+def get_poly_points(pline: LWPolyline | Polyline, format: str = "xyb") -> list[Sequence[float]]:
+    _points: list[Sequence[float]] = []
+    _points_round: list[Sequence[float]] = []
+    if isinstance(pline, LWPolyline):
+        _points = pline.get_points(format)
+    else:
+        for pnt in pline.vertices:
+            _points.append(pnt.format(format))
+    for p in _points:
+        pnt = tuple([round(p[i], TOL) for i in range(len(p))])
+        _points_round.append(pnt)
+    # _points_unique = list(set(_points_round))
+    return _points_round
 
 def get_vector_length(p1: Sequence[float], p2: Sequence[float]) -> float:
     """
@@ -43,6 +59,8 @@ def get_arc_length(p1: Sequence[float], p2: Sequence[float], pc: Sequence[float]
     :return: длина дуги
     :rtype: float
     """
+    if [p1[0],p1[1]] == [p2[0],p2[1]]:
+        return 0
     r = get_vector_length(p1, pc)  # длина радиуса
     c = get_vector_length(p1, p2)  # длина хорды
     # значение синуса половинного угла между векторами, которые начинаются в центре окружности дуги, а заканчиваются в точках хорды
@@ -60,12 +78,7 @@ def get_poly_length(pline: LWPolyline | Polyline) -> float:
     :rtype: float
     """
     _length: float = 0
-    _points: list[Sequence[float]] = []
-    if isinstance(pline, LWPolyline):
-        _points = pline.get_points("xyb")
-    else:
-        for pnt in pline.vertices:
-            _points.append(pnt.format("xyb"))
+    _points: list[Sequence[float]] = get_poly_points(pline)
     for i in range(len(_points)):
         j = i+1 if i < len(_points)-1 else 0
         if _points[i][2] != 0:
@@ -106,12 +119,7 @@ def get_min_coords(pline: LWPolyline | Polyline) -> tuple[float, float]:
     :return: кортеж из двух чисел: минимальной x-координаты и минимальной y-координаты
     :rtype: tuple[float, float]
     """
-    _points: list[Sequence[float]] = []
-    if isinstance(pline, LWPolyline):
-        _points = pline.get_points()
-    else:
-        for v in pline.vertices:
-            _points.append(v.format("xyseb"))
+    _points: list[Sequence[float]] = get_poly_points(pline)
     _x = min(_points[i][0] for i in range(len(_points)))
     _y = min(_points[i][1] for i in range(len(_points)))
     return _x, _y
@@ -126,12 +134,7 @@ def get_max_coords(pline: LWPolyline | Polyline) -> tuple[float, float]:
     :return: кортеж из двух чисел: максимальной x-координаты и максимальной y-координаты
     :rtype: tuple[float, float]
     """
-    _points: list[Sequence[float]] = []
-    if isinstance(pline, LWPolyline):
-        _points = pline.get_points()
-    else:
-        for v in pline.vertices:
-            _points.append(v.format("xyseb"))
+    _points: list[Sequence[float]] = get_poly_points(pline)
     _x = max(_points[i][0] for i in range(len(_points)))
     _y = max(_points[i][1] for i in range(len(_points)))
     return _x, _y
@@ -160,12 +163,7 @@ def convert_letter_to_poly(pline: LWPolyline | Polyline, msp: Modelspace, offset
     '''
     # if pline.is_closed:
     # return pline # если полилиния закрыта, ничего не делаем
-    _points: list[Sequence[float]] = []
-    if isinstance(pline, LWPolyline):
-        _points = pline.get_points(format="xy")
-    else:
-        for v in pline.vertices:
-            _points.append(v.format("xy"))
+    _points: list[Sequence[float]] = get_poly_points(pline)
     # отступ от исходной полилинии в одну сторону
     offset_points1: list[Vec2] = list(offset_vertices_2d(_points, offset=offset, closed=False))
     # отступ от исходной полилинии в другую сторону
@@ -178,14 +176,12 @@ def convert_letter_to_poly(pline: LWPolyline | Polyline, msp: Modelspace, offset
 
 def group_polys_by_details(
         poly: LWPolyline | Polyline,
-        msp: Modelspace,
-        blue_polys: list[LWPolyline | Polyline],
         green_polys: list[LWPolyline | Polyline],
         lblue_polys: list[LWPolyline | Polyline],
         yellow_polys: list[LWPolyline | Polyline],
 ) -> list[LWPolyline | Polyline]:
     """
-    Функция группирует полилинии, попавшие в описываемый прямоугольник вокруг рассматриваемой полилинии.
+    Функция группирует полилинии, попавшие в контур рассматриваемой полилинии, ±1 мм.
 
     :param poly: полилиния, вокруг которой группируются другие полилинии
     :type poly: LWPolyline | Polyline
@@ -197,17 +193,23 @@ def group_polys_by_details(
     :type green_polys: list[LWPolyline | Polyline]
     :param lblue_polys: список полилиний, которые должны быть найдены
     :type lblue_polys: list[LWPolyline | Polyline]
-    :return: список полилиний, попавших в описываемый прямоугольник вокруг рассматриваемой полилинии
+    :return: список полилиний, попавших в контур рассматриваемой полилинии
     :rtype: list[LWPolyline | Polyline]
     """
-    maxs: tuple[float, float] = get_max_coords(poly)
-    mins: tuple[float, float] = get_min_coords(poly)
-    window: Window = select.Window(mins, maxs)
-    group: list[LWPolyline | Polyline] = []
-    for e in select.bbox_overlap(window, msp):
-        if e not in blue_polys and e not in green_polys and e not in lblue_polys and e not in yellow_polys:
-            continue
-        if isinstance(e, LWPolyline | Polyline):
+    points: list[Sequence[float]] = get_poly_points(poly, "xy")
+    points_unique: list[Sequence[float]] = []
+    for pnt in points:
+        if not pnt in points_unique:
+            points_unique.append(pnt)
+    offpoints1: list[Vec2] = list(offset_vertices_2d(points_unique, offset=1, closed=False))
+    polygon1 = shapely.geometry.Polygon(offpoints1)
+    offpoints2: list[Vec2] = list(offset_vertices_2d(points_unique, offset=-1, closed=False))
+    polygon2 = shapely.geometry.Polygon(offpoints2)
+    group: list[LWPolyline | Polyline] = [poly]
+    for e in (green_polys + lblue_polys):
+        _points: list[Sequence[float]] = get_poly_points(e, "xy")
+        _polygon = shapely.geometry.Polygon(_points)
+        if polygon1.intersects(_polygon) or polygon2.intersects(_polygon):
             group.append(e)
     return group
 
@@ -226,15 +228,15 @@ def find_center_on_arc(p1: Sequence[float], p2: Sequence[float]) -> Sequence[flo
     x1, y1 = p1[0], p1[1]
     x2, y2 = p2[0], p2[1]
 
-    center: list[float] = list(ezdxf.math.bulge_center((x1, y1), (x2, y2), p1[4]))
+    center: list[float] = list(ezdxf.math.bulge_center((x1, y1), (x2, y2), p1[2]))
     xc, yc = center[0], center[1]
-    radius: float = ezdxf.math.bulge_radius((x1, y1), (x2, y2), p1[4])
+    radius: float = ezdxf.math.bulge_radius((x1, y1), (x2, y2), p1[2])
     alpha: float = 0
     if x2 != x1:
         alpha = math.pi/2 - math.atan((y2 - y1)/(x2 - x1))
     xr = abs(radius * math.cos(alpha))
     yr = abs(radius * math.sin(alpha))
-    if p1[4] < 0:
+    if p1[2] < 0:
         if y2 > y1:
             x = xc - xr
         else:
@@ -267,15 +269,10 @@ def convert_poly_to_PointList(poly: LWPolyline | Polyline) -> tuple[list, list]:
     """
     ifc_points: list[tuple[float, float]] = []
     arc_middles: list[int] = []
-    dxf_points: list[Sequence[float]] = []
-    if isinstance(poly, LWPolyline):
-        dxf_points = poly.get_points()
-    else:
-        for v in poly.vertices:
-            dxf_points.append(v.format("xyseb"))
+    dxf_points: list[Sequence[float]] = get_poly_points(poly)
     for p in dxf_points:
         ifc_points.append((float(p[0]), float(p[1])))
-        if p[4] != 0:
+        if p[2] != 0:
             if p != dxf_points[-1]:
                 p_next = dxf_points[dxf_points.index(p)+1]
             else:
@@ -337,7 +334,7 @@ def convert_detail_polys_to_Profiles(
     for k, v in green_curves.items():
         cut = builder.profile(v, name=f"{name}_cut_{k}")
         profiles.append(cut)
-    for k, v in yellow_curves.items():
-        letter = builder.profile(v, name=f"{name}_letter_{k}")
+    # for k, v in yellow_curves.items():
+    #     letter = builder.profile(v, name=f"{name}_letter_{k}")
         # profiles.append(letter)
     return profiles

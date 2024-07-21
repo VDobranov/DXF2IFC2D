@@ -27,6 +27,7 @@ print('Старт: ' + time.ctime(start))
 DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
 DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
 DXFFILENAME: str = "SKYLARK250_END-S-0_cnc"
+DXFFILENAME: str = "SKYLARK250_SKYLIGHT-XXS_cnc"
 # DXFFILENAME: str = "tiny1"
 BLOCKNAME: str = DXFFILENAME.removeprefix("SKYLARK250_").removesuffix("_cnc")
 IFCFILENAME: str = DXFFILENAME
@@ -75,8 +76,6 @@ details_polys: list[list[LWPolyline | Polyline]] = []
 for bp in blue_polys:
     group: list[LWPolyline | Polyline] = group_polys_by_details(
         poly=bp,
-        msp=msp,
-        blue_polys=blue_polys,
         green_polys=green_polys,
         lblue_polys=lblue_polys,
         yellow_polys=yellow_polys
@@ -90,7 +89,7 @@ detail_data: dict[str, list[float | int]] = {}
 detail_num: int = 0
 for group in details_polys:
     brk: bool = False
-    group_length: float = round(sum(get_poly_length(poly) for poly in group), 3)
+    group_length: float = round(sum(get_poly_length(poly) for poly in group), 1)
     for k, v in detail_data.items():
         if v[0] == group_length:
             v[1] += 1
