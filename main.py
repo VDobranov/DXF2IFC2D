@@ -1,10 +1,8 @@
 
-from src.dxf import check_polys, get_min_coords, get_max_coords, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
+from src.dxf import get_poly_length, get_min_coords, get_max_coords, get_poly_length, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
 
 import sys
-import numpy as np
 
-import ezdxf
 from ezdxf.filemanagement import readfile
 from ezdxf.lldxf.const import DXFStructureError
 from ezdxf.document import Drawing
@@ -12,15 +10,11 @@ from ezdxf.layouts.layout import Modelspace
 from ezdxf.entities.layer import Layer
 from ezdxf.entities.lwpolyline import LWPolyline
 from ezdxf.entities.polyline import Polyline
-import ezdxf.math
 
 import ifcopenshell as ios
-import ifcopenshell.geom
 from ifcopenshell import entity_instance, validate
 from ifcopenshell.api import run
-from ifcopenshell.geom import ShapeType
 from ifcopenshell.util import representation
-from ifcopenshell.util.shape import get_footprint_perimeter, get_vertices, get_edges
 from ifcopenshell.util.shape_builder import ShapeBuilder
 
 from pprint import pprint
@@ -66,10 +60,9 @@ for e in msp.query("LWPOLYLINE POLYLINE"):
     if _layer.color == 4:
         lblue_polys.append(e)  # type: ignore
     if _layer.color == 5:
-        if not check_polys(e, blue_polys): # type: ignore
-            blue_polys.append(e) # type: ignore
+        # if not check_polys(e, blue_polys): # type: ignore
+        blue_polys.append(e)  # type: ignore
 
-# reader = easyocr.Reader(['en'])
 details_polys: list[list[LWPolyline | Polyline]] = []
 for bp in blue_polys:
     group: list[LWPolyline | Polyline] = group_polys_by_details(
@@ -81,27 +74,24 @@ for bp in blue_polys:
         yellow_polys=yellow_polys
     )
     details_polys.append(group)
-    # yellow: list[LWPolyline | Polyline] = []
-    # for p in group:
-    #     if p in yellow_polys:
-    #         yellow.append(p)
-    # context = RenderContext(dwg)
-    # # backend = svg.SVGBackend()
-    # backend = pymupdf.PyMuPdfBackend()
-    # frontend = Frontend(context, backend)
-    # frontend.draw_entities(yellow)
-    # page = layout.Page(0, 0, layout.Units.mm, margins=layout.Margins.all(20))
-    # # svg_string = backend.get_string(page)
-    # # with open(f"{DXFPATH}/svgs/{bp.dxf.handle}.svg", "wt", encoding="utf8") as fp:
-    # #     fp.write(svg_string)
-    # png_bytes = backend.get_pixmap_bytes(page, fmt="png", dpi=72)
-    # result = reader.readtext(png_bytes, detail = 0, rotation_info=[0, 90, 180 ,270])
-    # print(result)
-    # with open(f"{DXFPATH}/pngs/{bp.dxf.handle}.png", "wb") as fp:
-    #     fp.write(png_bytes)
+
 
 detail_profiles: list[list[entity_instance]] = []
+detail_data: dict[str, list[float | int]] = {}
+detail_num: int = 0
 for group in details_polys:
+    brk: bool = False
+    group_length: float = round(sum(get_poly_length(poly)
+                                for poly in group), 3)
+    for k, v in detail_data.items():
+        if v[0] == group_length:
+            v[1] += 1
+            brk = True
+    if brk:
+        continue
+    detail_num += 1
+    detail_name = f"{BLOCKNAME}/{detail_num}"
+    detail_data[detail_name] = [group_length, 1]
     blue: LWPolyline | Polyline
     for ee in group:
         if ee in blue_polys:
@@ -113,7 +103,7 @@ for group in details_polys:
     _y = (maxs[1] - mins[1]) / 2 + mins[1]
     for ee in group:
         nullify_coords(ee, _x, _y)
-    detail_name = f"{BLOCKNAME}/{details_polys.index(group)}"
+    # detail_name = f"{BLOCKNAME}/{details_polys.index(group)+1}"
     detail_profiles.append(convert_detail_polys_to_Profiles(
         polys=group,
         builder=builder,
@@ -158,7 +148,8 @@ def check_CartesianPoint(coords: list[float]) -> bool:
     return False
 
 
-def create_CartesianPoint(coords: list[float]) -> entity_instance: # type: ignore
+# type: ignore
+def create_CartesianPoint(coords: list[float]) -> entity_instance:
     found = check_CartesianPoint(coords)
     if found:
         for p in model.by_type("IfcCartesianPoint"):
@@ -175,7 +166,7 @@ def check_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x
     return False
 
 
-def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance: # type: ignore
+def create_Axis2Placement3D(point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> entity_instance:  # type: ignore
     found = check_Axis2Placement3D(point, dir_z, dir_x)
     if found:
         for p in model.by_type("IfcAxis2Placement3D"):

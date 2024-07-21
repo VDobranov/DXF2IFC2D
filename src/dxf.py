@@ -12,46 +12,72 @@ from ezdxf.select import Window
 from ifcopenshell import entity_instance
 from ifcopenshell.util.shape_builder import ShapeBuilder
 
+TOL: int = 6
+
+
+def get_vector_length(p1: Sequence[float], p2: Sequence[float]) -> float:
+    """
+    Функция get_vector_length вычисляет длину вектора между двумя точками.
+
+    :param p1: первая точка
+    :type p1: Sequence[float]
+    :param p2: вторая точка
+    :type p2: Sequence[float]
+    :return: длина вектора
+    :rtype: float
+    """
+    return round(math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2), TOL)
+
+
+def get_arc_length(p1: Sequence[float], p2: Sequence[float], pc: Sequence[float]):
+    r = get_vector_length(p1, pc)  # длина радиуса
+    c = get_vector_length(p1, p2)  # длина хорды
+    a = round(c / (2 * r), TOL)
+    return 2 * math.asin(a) * r
+
+
+def get_poly_length(pline: LWPolyline | Polyline) -> float:
+    """
+    Функция get_poly_length принимает объект LWPolyline или Polyline и вычисляет длину полилинии (без учёта арок).
+
+    :param pline: объект LWPolyline или Polyline
+    :type pline: LWPolyline | Polyline
+    :return: длина полилинии
+    :rtype: float
+    """
+    _length: float = 0
+    _points: list[Sequence[float]] = []
+    if isinstance(pline, LWPolyline):
+        _points = pline.get_points("xyb")
+    else:
+        for pnt in pline.vertices:
+            _points.append(pnt.format("xyb"))
+    for i in range(len(_points)):
+        j = i+1 if i < len(_points)-1 else 0
+        if _points[i][2] != 0:
+            pc: Sequence[float] = list(ezdxf.math.bulge_center(
+                (_points[i][0], _points[i][1]), (_points[j][0], _points[j][1]), _points[i][2]))
+            _length += get_arc_length(_points[i], _points[j], pc)
+        else:
+            _length += get_vector_length(_points[i], _points[j])
+    return _length
+
 
 def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]) -> bool:
     """
-    Функция check_polys принимает объект LWPolyline или Polyline и список полилиний и проверяет, есть ли уже в списке полилиния с такой же длиной (без учёта арок)
+    Функция check_polys принимает объект LWPolyline или Polyline и список полилиний и проверяет, есть ли уже в списке полилиния с такой же длиной (с учётом арок).
 
     :param pline: объект LWPolyline или Polyline
     :type pline: LWPolyline | Polyline
     :param polys: список полилиний
     :type polys: list[LWPolyline | Polyline]
-    :return: True, если координаты полилинии совпадают с координатами всех полилиний в списке, False в противном случае
+    :return: True, если длина полилинии совпадает с длиной хотя бы одной полилинии в списке, False в противном случае
     :rtype: bool
     """
-    _length: float = 0
+    _length: float = get_poly_length(pline)
     _llength: float = 0
-    _points: list[Sequence[float]] = []
-    if isinstance(pline, LWPolyline):
-        _points = pline.get_points("xy")
-    else:
-        for pnt in pline.points():
-            _points.append([pnt[0], pnt[1]])
-
-    def vector_length(p1: Sequence[float], p2: Sequence[float]) -> float:
-        return math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)
-    for i in range(len(_points)):
-        j = i+1 if i < len(_points)-1 else 0
-        _length += vector_length(_points[i], _points[j])
     for p in polys:
-        _llength = 0
-        _points = []
-        if isinstance(p, LWPolyline):
-            _points = p.get_points("xy")
-        else:
-            for pnt in p.points():
-                _points.append([pnt[0], pnt[1]])
-        for i in range(len(_points)):
-            j = i+1 if i < len(_points)-1 else 0
-            _llength += vector_length(_points[i], _points[j])
-        _length = round(_length, 3)
-        _llength = round(_llength, 3)
-        print(f"{_length} - {_llength}")
+        _llength = get_poly_length(p)
         if _length == _llength:
             return True
     return False
