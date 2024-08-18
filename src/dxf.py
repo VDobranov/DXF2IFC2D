@@ -3,6 +3,7 @@ import math
 from typing import Sequence, Iterable
 import ezdxf
 import ezdxf.math
+import ezdxf.path
 from ezdxf import select
 from ezdxf.entities.lwpolyline import LWPolyline
 from ezdxf.entities.polyline import Polyline
@@ -10,7 +11,7 @@ from ezdxf.layouts.layout import Modelspace
 from ezdxf.math import offset_vertices_2d, Vec2
 from ezdxf.select import Window
 
-import shapely # type: ignore
+import shapely  # type: ignore
 
 from ifcopenshell import entity_instance
 from ifcopenshell.util.shape_builder import ShapeBuilder
@@ -31,6 +32,7 @@ def get_poly_points(pline: LWPolyline | Polyline, format: str = "xyb") -> list[S
         _points_round.append(pnt)
     # _points_unique = list(set(_points_round))
     return _points_round
+
 
 def get_vector_length(p1: Sequence[float], p2: Sequence[float]) -> float:
     """
@@ -59,7 +61,7 @@ def get_arc_length(p1: Sequence[float], p2: Sequence[float], pc: Sequence[float]
     :return: длина дуги
     :rtype: float
     """
-    if [p1[0],p1[1]] == [p2[0],p2[1]]:
+    if [p1[0], p1[1]] == [p2[0], p2[1]]:
         return 0
     r = get_vector_length(p1, pc)  # длина радиуса
     c = get_vector_length(p1, p2)  # длина хорды
@@ -70,7 +72,7 @@ def get_arc_length(p1: Sequence[float], p2: Sequence[float], pc: Sequence[float]
 
 def get_poly_length(pline: LWPolyline | Polyline) -> float:
     """
-    Функция get_poly_length принимает объект LWPolyline или Polyline и вычисляет длину полилинии (без учёта арок).
+    Функция get_poly_length принимает объект LWPolyline или Polyline и вычисляет длину полилинии (с учётом арок).
 
     :param pline: объект LWPolyline или Polyline
     :type pline: LWPolyline | Polyline
@@ -173,6 +175,10 @@ def convert_letter_to_poly(pline: LWPolyline | Polyline, msp: Modelspace, offset
     letter.dxf.layer = pline.dxf.layer
     return letter
 
+
+def convert_poly_to_Polygon(poly: LWPolyline | Polyline) -> shapely.geometry.Polygon:
+    _path = ezdxf.path.make_path(poly)
+    return shapely.geometry.Polygon(_path.flattening(1))
 
 def group_polys_by_details(
         poly: LWPolyline | Polyline,
@@ -338,3 +344,122 @@ def convert_detail_polys_to_Profiles(
     #     letter = builder.profile(v, name=f"{name}_letter_{k}")
         # profiles.append(letter)
     return profiles
+
+
+def get_centroid(polys: list[LWPolyline | Polyline]) -> tuple[float, float]:
+    """
+    Функция принимает список полилиний (LWPolyline или Polyline) и возвращает кортеж с координатами центра масс этих полилиний.
+
+    Если список полилиний пуст, функция возвращает кортеж с координатами (0,0).
+
+    :param polys: список полилиний (LWPolyline или Polyline)
+    :return: кортеж с координатами центра масс полилиний
+    """
+    if len(polys) == 0:
+        return [[0,0]]
+    _points: list[tuple[float, float]] = []
+    for p in polys:
+        _path = ezdxf.path.make_path(p)
+        _points.append(shapely.centroid(shapely.geometry.Polygon(_path.flattening(1))))
+    return shapely.centroid(shapely.geometry.MultiPoint(_points)).coords
+
+
+# Отсюда: https://stackoverflow.com/a/67839390/12785478
+# Сравнение 2-х векторов
+def vector_of_segment(start, end):
+    """
+    Функция vector_of_segment вычисляет вектор, который представляет собой отрезок между двумя точками.
+
+    Аргументы:
+    start (tuple): Координаты первой точки (x, y).
+    end (tuple): Координаты второй точки (x, y).
+
+    Возвращает:
+    tuple: Вектор, представляющий отрезок между двумя точками (dx, dy).
+
+    Пример использования:
+    >>> vector_of_segment((1, 2), (4, 6))
+    (3, 4)
+    """
+    a, b = start
+    c, d = end
+    return (c - a, d - b)
+
+
+def scalar_product(u, v):
+    """
+    Функция scalar_product вычисляет скалярное произведение двух векторов.
+
+    Аргументы:
+    u (list): Первый вектор.
+    v (list): Второй вектор.
+
+    Возвращает:
+    float: Скалярное произведение векторов u и v.
+
+    Пример использования:
+    >>> scalar_product([1, 2], [3, 4])
+    11.0
+    """
+    a, b = u
+    c, d = v
+    return a * c + b * d
+
+
+def norm(u):
+    """
+    Функция norm вычисляет норму вектора u.
+
+    Аргументы:
+    u (list): Вектор, для которого вычисляется норма.
+
+    Возвращает:
+    float: Норма вектора u.
+
+    Пример использования:
+    >>> norm([3, 4])
+    5.0
+    """
+    return math.sqrt(scalar_product(u, u))
+
+# python>=3.8: use math.hypot instead of defining your own norm
+
+
+def cosine_similarity(u, v):
+    """
+    Функция cosine_similarity вычисляет косинус угла между двумя векторами.
+
+    Аргументы:
+    u (list): Первый вектор.
+    v (list): Второй вектор.
+
+    Возвращает:
+    float: Косинус угла между векторами u и v.
+
+    Пример использования:
+    >>> cosine_similarity([1, 2], [3, 4])
+    0.9063077870366072
+    """
+    if (norm(u) * norm(v)) == 0:
+        return 0.999999
+    return scalar_product(u, v) / (norm(u) * norm(v))
+
+
+def cosine_similarity_of_roads(line1, line2):
+    """
+    Функция cosine_similarity_of_roads вычисляет косинус угла между двумя линиями, представленными векторами.
+
+    Аргументы:
+    line1 (tuple): Координаты двух точек, представляющих первую линию.
+    line2 (tuple): Координаты двух точек, представляющих вторую линию.
+
+    Возвращает:
+    float: Косинус угла между линиями, представленными векторами.
+
+    Пример использования:
+    >>> cosine_similarity_of_roads(((1, 2), (4, 6)), ((7, 8), (10, 12)))
+    0.9063077870366072
+    """
+    u = vector_of_segment(*line1)
+    v = vector_of_segment(*line2)
+    return cosine_similarity(u, v)

@@ -1,15 +1,19 @@
 
 
 from src.ifc import create_Plate, create_PlateType, gather_LocalPlacements
-from src.dxf import get_poly_length, get_min_coords, get_max_coords, get_poly_length, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles
+from src.dxf import cosine_similarity, cosine_similarity_of_roads, get_poly_length, get_min_coords, get_max_coords, get_poly_length, get_vector_length, nullify_coords, group_polys_by_details, convert_detail_polys_to_Profiles, get_centroid
+from src.classes import Block, Settings, Sheet
 
 import sys
 import time
+import numpy as np
 
+import ezdxf
 from ezdxf.filemanagement import readfile
 from ezdxf.lldxf.const import DXFStructureError
 from ezdxf.document import Drawing
 from ezdxf.layouts.layout import Modelspace
+from ezdxf.math import BoundingBox
 from ezdxf.entities.layer import Layer
 from ezdxf.entities.lwpolyline import LWPolyline
 from ezdxf.entities.polyline import Polyline
@@ -24,10 +28,10 @@ from pprint import pprint
 start = time.time()
 print('Старт: ' + time.ctime(start))
 
-DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
-DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
+# DXFFILENAME: str = "SKYLARK250_CORNER-S_cnc"
+# DXFFILENAME: str = "SKYLARK250_WINDOW-XL2_cnc"
 DXFFILENAME: str = "SKYLARK250_END-S-0_cnc"
-DXFFILENAME: str = "SKYLARK250_SKYLIGHT-XXS_cnc"
+# DXFFILENAME: str = "SKYLARK250_SKYLIGHT-XXS_cnc"
 # DXFFILENAME: str = "tiny1"
 BLOCKNAME: str = DXFFILENAME.removeprefix("SKYLARK250_").removesuffix("_cnc")
 IFCFILENAME: str = DXFFILENAME
@@ -47,6 +51,18 @@ except IOError:
 except DXFStructureError:
     print(f"File {DXFFILENAME} is not a DXF file.")
     sys.exit(2)
+
+
+
+
+
+
+settings = Settings(thickness=THICKNESS, outerColor=5, innerColor=4, millColor=3)
+sheet = Sheet(settings, dwg)
+block = Block(BLOCKNAME, [sheet])
+
+
+
 
 msp: Modelspace = dwg.modelspace()
 
@@ -84,30 +100,37 @@ for bp in blue_polys:
 
 
 detail_profiles: list[list[entity_instance]] = []
-# словарь с деталями, в котором: имя детали, её длина и требуемое количество для блока
-detail_data: dict[str, list[float | int]] = {}
+# словарь с деталями, в котором: имя детали, её длина, вектор между центром и вырезами и требуемое количество для блока
+detail_data: dict[str, list[float | int | np.ndarray]] = {}
 detail_num: int = 0
 for group in details_polys:
     brk: bool = False
-    group_length: float = round(sum(get_poly_length(poly) for poly in group), 1)
-    for k, v in detail_data.items():
-        if v[0] == group_length:
-            v[1] += 1
-            brk = True
-    if brk:
-        continue
-    detail_num += 1
-    detail_name: str = f"{BLOCKNAME}/{detail_num}"
-    detail_data[detail_name] = [group_length, 1]
     blue: LWPolyline | Polyline
     for ee in group:
         if ee in blue_polys:
             blue = ee
             break
-    mins: tuple[float, float] = get_min_coords(blue)
-    maxs: tuple[float, float] = get_max_coords(blue)
-    _x = (maxs[0] - mins[0]) / 2 + mins[0]
-    _y = (maxs[1] - mins[1]) / 2 + mins[1]
+    bbox: BoundingBox = ezdxf.bbox.extents([blue])
+    group_length: float = round(sum(get_poly_length(poly) for poly in group), 1)
+    group_cuts_centroid: tuple[float, float] = get_centroid(set(group).intersection(green_polys))
+    # coords1: tuple[float, float] = [bbox.extmin[0], bbox.extmin[1]]
+    coords: tuple[float, float] = [group_cuts_centroid[0][0], group_cuts_centroid[0][1]]
+    if coords == [0, 0]:
+        coords = [bbox.center[0], bbox.center[1]]
+    # group_cut_vec: float = get_vector_length(bbox.center, coords)
+    group_cut_vec: tuple[tuple[float], tuple[float]] = [[bbox.center.x, bbox.center.y], coords]
+    for k, v in detail_data.items():
+        cos = cosine_similarity_of_roads(v[1], group_cut_vec)
+        if v[0] == group_length and round(cos, 9) == 0.999999:
+            v[2] += 1
+            brk = True
+    if brk:
+        continue
+    detail_num += 1
+    detail_name: str = f"{BLOCKNAME}/{detail_num}"
+    detail_data[detail_name] = [group_length, group_cut_vec, 1]
+    _x = bbox.center[0]
+    _y = bbox.center[1]
     for ee in group:
         nullify_coords(ee, _x, _y)
     detail_profiles.append(convert_detail_polys_to_Profiles(
@@ -160,7 +183,7 @@ for p in detail_profiles:
         name=name,
         THICKNESS=THICKNESS,
     )
-    amount = detail_data[name][1]
+    amount = detail_data[name][2]
     for i in range(int(amount)):
         name2 = name
         if amount > 1:

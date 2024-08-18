@@ -1,0 +1,146 @@
+@startuml "Classes"
+!pragma layout smetana
+
+
+class Settings {
+    -thickness : int
+    -outerColor : int
+    -innerColor : int
+    -millColor : int
+    +setThickness(int) : None
+    +setOuterColor(int) : None
+    +setInnerColor(int) : None
+    +setMillColor(int) : None
+    +getThickness() : int
+    +getOuterColor() : int
+    +getInnerColor() : int
+    +getMillColor() : int
+}
+class Block {
+    -name : str
+    -templates : list[Template]
+    -sheets : list[Sheet]
+    -formTemplates() : list[Template]
+}
+class Sheet {
+    {field}-thickness : int = Settings.getThickness()
+    -width : int
+    -length : int
+    -dwg : Drawing
+    -details : list[Detail]
+    {field}-outerDrillPaths : PathFormer.getOuterDrillPaths()
+    {field}-innerDrillPaths : PathFormer.getInnerDrillPaths()
+    {field}-shallowDrillPaths : PathFormer.getShallowDrillPaths()
+    -formDetails() : None
+    +getDetails() : list[Detail]
+}
+class Detail {
+    -contour : DrillPath
+    -cuts : list[DrillPath] = []
+    -mills : list[DrillPath] = []
+    -drillLength : float = 0.0
+    -millsCentroidsShape : MultiPoint = None
+    -template : Template = None
+    -calculateDrillLength() : None
+    -calculateMillsCentroidLocs() : None
+    -formMillsCentroidsShape() : MultiPoint
+    +getDrillLength() : float
+    +getMillsCentroidsShape() : MultiPoint
+    +assignTemplate() : None
+}
+class Template {
+    -name : str
+    -details : list[Detail]
+    -contour : DrillPath
+    -cuts : list[DrillPath] = []
+    -mills : list[DrillPath] = []
+    -drillLength : float = 0.0
+    -millsCentroidsShape : MultiPoint = None
+    +addDetail() : None
+}
+class Path {
+    -polyline : LWpolyline | Polyline = None
+}
+class DrillPath {
+    -length : float = 0.0
+    -bbox : bbox = None
+    -centroidLoc : Vec2 = None
+    -centroidAbs : Vec2 = None
+    -setLength() : None
+    -setBbox() : None
+    -setCentroidLoc() : None
+    -setCentroidAbs() : None
+    +getLength() : int
+    +getBbox() : bbox
+    +getCentroidLoc() : Vec2
+    +getCentroidAbs() : Vec2
+}
+
+class SheetBoundaryPath
+
+' class OuterDrillPath {
+'     {field}-color : int = Settings.getOuterColor()
+' }
+' class InnerDrillPath {
+'     {field}-color : int = Settings.getInnerColor()
+' }
+' class ShallowDrillPath {
+'     {field}-color : int = Settings.getMillColor()
+' }
+class PathFormer {
+    -settings : Settings
+    -dwg: Drawing
+    -outerDrillPaths : list[DrillPath]
+    -innerDrillPaths : list[DrillPath]
+    -shallowDrillPaths : list[DrillPath]
+    -sheetBoundaryPaths : list[SheetBoundaryPath]
+    -formPaths() : None
+    +getOuterDrillPaths() : list[DrillPath]
+    +getInnerDrillPaths() : list[DrillPath]
+    +getShallowDrillPaths() : list[DrillPath]
+}
+class PathCombiner {
+    -contour : Path
+    -consideredPaths : list[Path]
+    -combinedPaths : list[Path]
+    +setContour() : None
+    +setConsideredPaths() : None
+    -combinePaths() : list[Path]
+    +getCombinedPaths() : list[Path]
+}
+
+class DetailComparer {
+    -details : list[Detail]
+    -templates : list[Template]
+    -recognizeTemplates() : None
+    -compareDetailAgainstTemplates() : None
+    -checkDetailAgainstTemplate() : None
+    -goThroughDetails() : None
+    +getTemplates() : list[Template]
+}
+
+' OuterDrillPath --|> DrillPath
+' InnerDrillPath --|> DrillPath
+' ShallowDrillPath --|> DrillPath
+
+DrillPath --|> Path
+SheetBoundaryPath --|> Path
+
+Sheet::details "1" o-- "1..*" Detail
+' Sheet::outerDrillPaths "1" o-- "1..*" OuterDrillPath
+' Sheet::innerDrillPaths "1" o-- "0..*" InnerDrillPath
+' Sheet::shallowDrillPaths "1" o-- "0..*" ShallowDrillPath
+Sheet o-- DrillPath
+Sheet -- PathFormer
+Sheet -- PathCombiner
+
+' Detail::contour "1" -- "1" OuterDrillPath
+' Detail::cuts "1" -- "0..*" InnerDrillPath
+' Detail::mills "1" -- "0..*" ShallowDrillPath
+Detail -- DrillPath
+Detail::template "1..*" -- "1" Template
+
+Block -- DetailComparer
+Block -- Sheet
+
+@enduml
