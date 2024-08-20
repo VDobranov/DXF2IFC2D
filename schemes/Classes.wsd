@@ -7,20 +7,41 @@ class Settings {
     -outerColor : int
     -innerColor : int
     -millColor : int
-    +setThickness(int) : None
-    +setOuterColor(int) : None
-    +setInnerColor(int) : None
-    +setMillColor(int) : None
+    +setThickness() : None
+    +setOuterColor() : None
+    +setInnerColor() : None
+    +setMillColor() : None
     +getThickness() : int
     +getOuterColor() : int
     +getInnerColor() : int
     +getMillColor() : int
 }
+
+class Model {
+    -ifcFile : entity_instance
+    -settings : entity_instance
+    -builder : entity_instance
+    -body : entity_instance
+    -history : entity_instance
+    -site : entity_instance
+    -storey : entity_instance
+    -origin : entity_instance
+    -placement3d : entity_instance
+    -placement2d : entity_instance
+    -dir_x : entity_instance
+    -dir_y : entity_instance
+    -dir_z : entity_instance
+    -local_placements : dict[str, entity_instance]
+}
+
 class Block {
     -name : str
     -templates : list[Template]
     -sheets : list[Sheet]
+    -plateTypes : list[entity_instance]
     -formTemplates() : list[Template]
+    -makePlateTypes() : list[entity_instance]
+    -makePlates() : list[entity_instance]
 }
 class Sheet {
     {field}-thickness : int = Settings.getThickness()
@@ -28,52 +49,55 @@ class Sheet {
     -length : int
     -dwg : Drawing
     -details : list[Detail]
-    {field}-outerDrillPaths : PathFormer.getOuterDrillPaths()
-    {field}-innerDrillPaths : PathFormer.getInnerDrillPaths()
-    {field}-shallowDrillPaths : PathFormer.getShallowDrillPaths()
+    {field}-outerDrillPaths : list[DrillPath] = PathFormer.getOuterDrillPaths()
+    {field}-innerDrillPaths : list[DrillPath] = PathFormer.getInnerDrillPaths()
+    {field}-shallowDrillPaths : list[DrillPath] = PathFormer.getShallowDrillPaths()
     -formDetails() : None
     +getDetails() : list[Detail]
 }
 class Detail {
     -contour : DrillPath
-    -cuts : list[DrillPath] = []
-    -mills : list[DrillPath] = []
-    -drillLength : float = 0.0
-    -millsCentroidsShape : MultiPoint = None
-    -template : Template = None
+    -cuts : list[DrillPath]
+    -mills : list[DrillPath]
+    -drillLength : float
+    -contourLoc : DrillPath
+    -cutsLoc : list[DrillPath]
+    -millsLoc : list[DrillPath]
+    -millsCentroidsShape : MultiPoint
     -calculateDrillLength() : None
-    -calculateMillsCentroidLocs() : None
+    -normalizeDrillPath() : DrillPath
     -formMillsCentroidsShape() : MultiPoint
     +getDrillLength() : float
     +getMillsCentroidsShape() : MultiPoint
-    +assignTemplate() : None
 }
 class Template {
+    -builder : ShapeBuilder
     -name : str
     -details : list[Detail]
     -contour : DrillPath
-    -cuts : list[DrillPath] = []
-    -mills : list[DrillPath] = []
-    -drillLength : float = 0.0
-    -millsCentroidsShape : MultiPoint = None
+    -cuts : list[DrillPath]
+    -mills : list[DrillPath]
+    -drillLength : float
+    -millsCentroidsShape : MultiPoint
+    -cuttingThroughProfile : Profile
+    -millingProfiles : list[Profile]
+    -createCuttingThroughProfile() : entity_instance
+    -createMillingProfile() : entity_instance
     +addDetail() : None
 }
 class Path {
-    -polyline : LWpolyline | Polyline = None
+    -polyline : LWpolyline | Polyline
 }
 class DrillPath {
-    -length : float = 0.0
-    -bbox : bbox = None
-    -centroidLoc : Vec2 = None
-    -centroidAbs : Vec2 = None
+    -length : float
+    -bbox : bbox
+    -centroid : Vec2
     -setLength() : None
     -setBbox() : None
-    -setCentroidLoc() : None
-    -setCentroidAbs() : None
+    -setCentroid() : None
     +getLength() : int
     +getBbox() : bbox
-    +getCentroidLoc() : Vec2
-    +getCentroidAbs() : Vec2
+    +getCentroid() : Vec2
 }
 
 class SheetBoundaryPath
@@ -112,11 +136,39 @@ class PathCombiner {
 class DetailComparer {
     -details : list[Detail]
     -templates : list[Template]
-    -recognizeTemplates() : None
-    -compareDetailAgainstTemplates() : None
+    -checkShapes() : None
+    -recognizeTemplateForDetail() : None
     -checkDetailAgainstTemplate() : None
     -goThroughDetails() : None
     +getTemplates() : list[Template]
+}
+
+class Profile {
+    -builder : ShapeBuilder
+    -name : str
+    -outer_curve : Curve
+    -inner_curves : list[Curve]
+    +makeIfcProfile() : entity_instance
+}
+
+class Curve {
+    -builder : ShapeBuilder
+    -ifc_points : list[tuple[float, float]]
+    -arc_middles : list[int]
+    +makeIfcCurve() : entity_instance
+}
+
+class PlateType {
+    -settings : Settings
+    -model : Model
+    -template : Template
+    +makeIfcPlateType() : entity_instance
+}
+
+class Plate {
+    -model : Model
+    -type : PlateType
+    +makeIfcPlate() : entity_instance
 }
 
 ' OuterDrillPath --|> DrillPath
@@ -133,6 +185,10 @@ Sheet::details "1" o-- "1..*" Detail
 Sheet o-- DrillPath
 Sheet -- PathFormer
 Sheet -- PathCombiner
+Sheet -- Settings
+
+PathFormer -- DrillPath
+PathCombiner -- Path
 
 ' Detail::contour "1" -- "1" OuterDrillPath
 ' Detail::cuts "1" -- "0..*" InnerDrillPath
@@ -140,7 +196,25 @@ Sheet -- PathCombiner
 Detail -- DrillPath
 Detail::template "1..*" -- "1" Template
 
+Template "0..*" -- "1..*" Profile
+
 Block -- DetailComparer
-Block -- Sheet
+Block o-- Sheet
+Block "1" *-- "1..*" Template
+Block "1" *-- "1..*" PlateType
+Block "1" *-- "1..*" Plate
+Block::builder "1" -- "1" Model::builder
+
+DetailComparer -- Detail
+DetailComparer -- Template
+
+Profile "1" -- "1..*" Curve
+
+PlateType -- Settings
+PlateType -- Model
+PlateType "1" -- "1" Template
+
+Plate -- Model
+Plate -- PlateType
 
 @enduml

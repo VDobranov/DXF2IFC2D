@@ -162,7 +162,7 @@ def create_PlateType(
     for profile in profiles:
         _point: entity_instance
         _placement: entity_instance
-        if "cut" in profile.ProfileName:
+        if "milling" in profile.ProfileName:
             _point = create_CartesianPoint(model, [0., 0., THICKNESS/2])
             _placement = create_Axis2Placement3D(model, _point, dir_z, dir_x)
             _cuts.append(create_IfcExtrudedAreaSolid(model=model, sweptArea=profile,
