@@ -5,6 +5,7 @@ from src.classes import Block, Model, Settings, Sheet
 import sys
 import time
 
+import ezdxf
 from ezdxf.filemanagement import readfile
 from ezdxf.lldxf.const import DXFStructureError
 from ezdxf.document import Drawing
@@ -47,6 +48,13 @@ model = Model(settings=settings, ifcFile=ifcFile)
 sheet = Sheet(settings, dwg)
 block = Block(settings, model, BLOCKNAME, [sheet])
 
+# dwg2 = ezdxf.new()
+# msp2 = dwg2.modelspace()
+# for template in block.templates:
+#     _drills = [template.contour] + template.cuts + template.mills
+#     for _drill in _drills:
+#         msp2.add_foreign_entity(_drill.polyline)
+# dwg2.saveas(f"{DXFPATH}/{DXFFILENAME}_.dxf")
 model.ifcFile.write(f"{IFCPATH}/{IFCFILENAME}.ifc")
 
 # валидация

@@ -1,5 +1,4 @@
 
-from threading import local
 from src.ifc import create_Plate, create_PlateType, gather_LocalPlacements
 
 from src.dxf import convert_poly_to_PointList, convert_poly_to_Polygon, get_poly_length, get_centroid, nullify_coords
@@ -152,7 +151,7 @@ class Detail:
 
     def normalizeDrillPath(self, drillPath: DrillPath) -> DrillPath:
         _x, _y = self.contour.bbox.center[0], self.contour.bbox.center[1]
-        _drillPathPolyline = copy.copy(drillPath.polyline)
+        _drillPathPolyline = drillPath.polyline.copy()
         nullify_coords(_drillPathPolyline, _x, _y)
         _drillPath = DrillPath(_drillPathPolyline)
         return _drillPath
