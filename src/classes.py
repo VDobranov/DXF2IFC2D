@@ -1,17 +1,17 @@
 
-from src.ifc import create_Plate, create_PlateType, gather_LocalPlacements
+from src.ifc import create_Axis2Placement2D, create_CartesianPoint, create_Plate, create_PlateType, gather_LocalPlacements
 
-from src.dxf import convert_poly_to_PointList, convert_poly_to_Polygon, get_poly_length, get_centroid, nullify_coords
+from src.dxf import convert_poly_to_PointList, convert_poly_to_Polygon, get_dxf_entity_length,  get_centroid, nullify_coords
 
-import copy
 
 import ezdxf
 from ezdxf.document import Drawing
 from ezdxf.entities.layer import Layer
 from ezdxf.entities.lwpolyline import LWPolyline
 from ezdxf.entities.polyline import Polyline
+from ezdxf.entities.circle import Circle
 from ezdxf.layouts.layout import Modelspace
-from ezdxf.math import BoundingBox
+from ezdxf.math import BoundingBox, Vec2, Vec3
 
 import ifcopenshell as ifcos
 from ifcopenshell import entity_instance
@@ -40,7 +40,7 @@ class Settings:
 
 
 class Model:
-    def __init__(self, settings: Settings = None, ifcFile: ifcos.file = None):
+    def __init__(self, settings: Settings, ifcFile: ifcos.file):
         self.ifcFile: ifcos.file = ifcFile
         self.settings: Settings = settings
         self.builder: ShapeBuilder = ShapeBuilder(ifcFile)
@@ -63,38 +63,46 @@ class Model:
             if list(dir.DirectionRatios) == [0, 0, 1]:
                 self.dir_z: entity_instance = dir
                 break
+        for dir in ifcFile.by_type("IfcDirection"):
+            if list(dir.DirectionRatios) == [1, 0]:
+                self.dir_x2d: entity_instance = dir
+                break
+        for dir in ifcFile.by_type("IfcDirection"):
+            if list(dir.DirectionRatios) == [0, 1]:
+                self.dir_y2d: entity_instance = dir
+                break
         self.local_placements: dict[str, entity_instance] = gather_LocalPlacements(ifcFile)
 
 
 class Path:
-    def __init__(self, polyline: LWPolyline | Polyline = None):
-        self.polyline: LWPolyline | Polyline = polyline
+    def __init__(self, polyline: LWPolyline | Polyline | Circle):
+        self.polyline: LWPolyline | Polyline | Circle = polyline
 
 
 class DrillPath(Path):
-    def __init__(self, polyline: LWPolyline | Polyline = None):
+    def __init__(self, polyline: LWPolyline | Polyline | Circle):
         super().__init__(polyline)
         self.length: float = self.setLength()
         self.bbox: BoundingBox = self.setBbox()
         self.centroid: tuple[float, float] = self.setCentroid()
 
     def setLength(self) -> float:
-        return get_poly_length(self.polyline)
+        return get_dxf_entity_length(self.polyline)
 
     def setBbox(self) -> BoundingBox:
-        return ezdxf.bbox.extents([self.polyline])
+        return ezdxf.bbox.extents([self.polyline]) # type: ignore
 
     def setCentroid(self) -> tuple[float, float]:
-        return get_centroid([self.polyline])
+        return get_centroid([self.polyline]) # type: ignore
 
 
 class SheetBoundaryPath(Path):
-    def __init__(self, polyline: LWPolyline | Polyline = None):
+    def __init__(self, polyline: LWPolyline | Polyline | Circle):
         super().__init__(polyline)
 
 
 class PathFormer:
-    def __init__(self, settings: Settings = None, dwg: Drawing = None):
+    def __init__(self, settings: Settings, dwg: Drawing):
         self.settings: Settings = settings
         self.dwg: Drawing = dwg
         self.outerDrillPaths: list[DrillPath] = []
@@ -105,16 +113,16 @@ class PathFormer:
 
     def formPaths(self) -> None:
         _msp: Modelspace = self.dwg.modelspace()
-        for e in _msp.query("LWPOLYLINE POLYLINE"):
+        for e in _msp.query("LWPOLYLINE POLYLINE CIRCLE"):
             _entityLayer: str = e.dxf.layer
             _layer: Layer = self.dwg.layers.get(_entityLayer)
             _color: int = _layer.color
             if _color == self.settings.outerColor:
-                self.outerDrillPaths.append(DrillPath(e))
+                self.outerDrillPaths.append(DrillPath(e)) # type: ignore
             if _color == self.settings.innerColor:
-                self.innerDrillPaths.append(DrillPath(e))
+                self.innerDrillPaths.append(DrillPath(e)) # type: ignore
             if _color == self.settings.millColor:
-                self.shallowDrillPaths.append(DrillPath(e))
+                self.shallowDrillPaths.append(DrillPath(e)) # type: ignore
 
     def getOuterDrillPaths(self) -> list[DrillPath]:
         return self.outerDrillPaths
@@ -129,9 +137,9 @@ class PathFormer:
 class Detail:
     def __init__(
             self,
-            contour: DrillPath = None,
-            cuts: list[DrillPath] = None,
-            mills: list[DrillPath] = None
+            contour: DrillPath,
+            cuts: list[DrillPath],
+            mills: list[DrillPath]
     ):
         self.contour: DrillPath = contour
         self.cuts: list[DrillPath] = cuts
@@ -152,7 +160,7 @@ class Detail:
     def normalizeDrillPath(self, drillPath: DrillPath) -> DrillPath:
         _x, _y = self.contour.bbox.center[0], self.contour.bbox.center[1]
         _drillPathPolyline = drillPath.polyline.copy()
-        nullify_coords(_drillPathPolyline, _x, _y)
+        nullify_coords(_drillPathPolyline, _x, _y) # type: ignore
         _drillPath = DrillPath(_drillPathPolyline)
         return _drillPath
 
@@ -165,30 +173,30 @@ class Detail:
 class PathCombiner:
     def __init__(
             self,
-            contour: Path | None = None,
-            consideredPaths: list[Path] | None = None
+            contour: DrillPath | None = None,
+            consideredPaths: list[DrillPath] | None = None
     ):
-        self.contour: Path = contour
-        self.consideredPaths: list[Path] = consideredPaths
-        self.combinedPaths: list[Path] = self.combinePaths()
+        self.contour: DrillPath | None = contour
+        self.consideredPaths: list[DrillPath] | None = consideredPaths
+        self.combinedPaths: list[DrillPath] = self.combinePaths()
 
-    def setContour(self, contour: Path = None) -> None:
-        self.contour: Path = contour
+    def setContour(self, contour: DrillPath) -> None:
+        self.contour = contour
         self.combinedPaths = self.combinePaths()
 
-    def setConsideredPaths(self, paths: list[Path] = None) -> None:
-        self.consideredPaths: list[Path] = paths
+    def setConsideredPaths(self, paths: list[DrillPath]) -> None:
+        self.consideredPaths = paths
         self.combinedPaths = self.combinePaths()
 
-    def combinePaths(self) -> list[Path]:
+    def combinePaths(self) -> list[DrillPath]:
         if self.contour is None or self.consideredPaths is None:
-            return None
-        _contourPolygon: Polygon = convert_poly_to_Polygon(self.contour.polyline)
+            return []
+        _contourPolygon: Polygon = convert_poly_to_Polygon(self.contour.polyline) # type: ignore
         _outerPolygon: Polygon = _contourPolygon.buffer(1)
         _innerPolygon: Polygon = _contourPolygon.buffer(-1)
-        _filteredPaths: list[Path] = []
+        _filteredPaths: list[DrillPath] = []
         for path in self.consideredPaths:
-            _pathPolygon: Polygon = convert_poly_to_Polygon(path.polyline)
+            _pathPolygon: Polygon = convert_poly_to_Polygon(path.polyline) # type: ignore
             if _pathPolygon.intersects(_outerPolygon) or _pathPolygon.intersects(_innerPolygon):
                 _filteredPaths.append(path)
         return _filteredPaths
@@ -198,7 +206,7 @@ class PathCombiner:
 
 
 class Sheet:
-    def __init__(self, settings: Settings = None, dwg: Drawing = None):
+    def __init__(self, settings: Settings, dwg: Drawing):
         self.settings: Settings = settings
         self.dwg: Drawing = dwg
         self.thickness: float = self.settings.thickness
@@ -233,15 +241,15 @@ class Sheet:
 class Template:
     def __init__(
         self,
-        builder: ShapeBuilder = None,
-        name: str = None,
-        contour: DrillPath = None,
-        cuts: list[DrillPath] = None,
-        mills: list[DrillPath] = None,
-        drillLength: float = None,
-        millsCentroidShape: MultiPoint = None
+        model: Model,
+        name: str,
+        contour: DrillPath,
+        cuts: list[DrillPath],
+        mills: list[DrillPath],
+        drillLength: float,
+        millsCentroidShape: MultiPoint
     ):
-        self.builder: ShapeBuilder = builder
+        self.model: Model = model
         self.name: str = name
         self.details: list[Detail] = []
         self.contour: DrillPath = contour
@@ -256,15 +264,13 @@ class Template:
         self.details.append(detail)
 
     def createCuttingThroughProfile(self) -> entity_instance:
-        _outerCurvePoints: tuple[list[tuple[float, float]], list[int]] = convert_poly_to_PointList(self.contour.polyline)
-        _outerCurve = Curve(self.builder, _outerCurvePoints[0], _outerCurvePoints[1]).makeIfcCurve()
+        _outerCurve = Curve(self.model, self.contour).makeIfcCurve()
         _innerCurves: list[entity_instance] = []
         for cut in self.cuts:
-            _innerCurvePoints: tuple[list[tuple[float, float]], list[int]] = convert_poly_to_PointList(cut.polyline)
-            _innerCurve = Curve(self.builder, _innerCurvePoints[0], _innerCurvePoints[1]).makeIfcCurve()
+            _innerCurve = Curve(self.model, cut).makeIfcCurve()
             _innerCurves.append(_innerCurve)
         _profile = Profile(
-            builder=self.builder,
+            builder=self.model.builder,
             name=f"{self.name}_cutting",
             outer_curve=_outerCurve,
             inner_curves=_innerCurves,
@@ -274,10 +280,9 @@ class Template:
     def createMillingProfile(self) -> list[entity_instance]:
         _profiles: list[entity_instance] = []
         for mill in self.mills:
-            _outerCurvePoints: tuple[list[tuple[float, float]], list[int]] = convert_poly_to_PointList(mill.polyline)
-            _outerCurve = Curve(self.builder, _outerCurvePoints[0], _outerCurvePoints[1]).makeIfcCurve()
+            _outerCurve = Curve(self.model, mill).makeIfcCurve()
             _profile = Profile(
-                builder=self.builder,
+                builder=self.model.builder,
                 name=f"{self.name}_milling_{len(_profiles) + 1}",
                 outer_curve=_outerCurve
             ).makeIfcProfile()
@@ -288,11 +293,11 @@ class Template:
 class DetailComparer:
     def __init__(
         self,
-        builder: ShapeBuilder = None,
-        blockName: str = None,
-        details: list[Detail] = None
+        model: Model,
+        blockName: str,
+        details: list[Detail]
     ):
-        self.builder: ShapeBuilder = builder
+        self.model: Model = model
         self.blockName: str = blockName
         self.details: list[Detail] = details
         self.templates: list[Template] = []
@@ -309,7 +314,7 @@ class DetailComparer:
                 _template.addDetail(detail)
                 return
         _newTemplate = Template(
-            builder=self.builder,
+            model=self.model,
             name=f"{self.blockName}/{len(self.templates) + 1}",
             contour=detail.contourLoc,
             cuts=detail.cutsLoc,
@@ -327,7 +332,7 @@ class DetailComparer:
             _millsCheck = self.checkShapes(
                 detail.millsCentroidShape,
                 template.millsCentroidShape,
-                [0, 0]
+                (0., 0.)
             )
         return _lengthCheck and _millsCheck
 
@@ -360,95 +365,18 @@ class DetailComparer:
         return MultiPoint(_shapeCoords)
 
 
-class Block:
-    def __init__(
-        self,
-        settings: Settings = None,
-        model: Model = None,
-        name: str = None,
-        sheets: list[Sheet] = None
-    ):
-        self.settings: Settings = settings
-        self.model: Model = model
-        self.name: str = name
-        self.sheets: list[Sheet] = sheets
-        self.templates: list[Template] = self.formTemplates()
-        self.plateTypes: list[PlateType] = self.makePlateTypes()
-        self.plates: list[Plate] = self.makePlates()
-
-    def formTemplates(self) -> list[Template]:
-        _detailComparer: DetailComparer = DetailComparer(self.model.builder, self.name, self.sheets[0].getDetails())
-        return _detailComparer.templates
-
-    def makePlateTypes(self) -> None:
-        _types: list[entity_instance] = []
-        for template in self.templates:
-            _types.append(PlateType(self.settings, self.model, template))
-        return _types
-    
-    def makePlates(self) -> None:
-        _plates: list[entity_instance] = []
-        for plateType in self.plateTypes:
-            for _ in range(len(plateType.template.details)):
-                _plates.append(Plate(self.model, plateType))
-        return _plates
-
-
-class Profile:
-    def __init__(
-        self,
-        builder: ShapeBuilder = None,
-        name: str = None,
-        outer_curve: entity_instance = None,
-        inner_curves: list[entity_instance] = []
-    ):
-        self.builder: ShapeBuilder = builder
-        self.name: str = name
-        self.outer_curve: Curve = outer_curve
-        self.inner_curves: list[Curve] = inner_curves
-
-    def makeIfcProfile(self) -> entity_instance:
-        _profile = self.builder.profile(
-            name=self.name,
-            outer_curve=self.outer_curve,
-            inner_curves=self.inner_curves
-        )
-        return _profile
-
-
-class Curve:
-    def __init__(
-        self,
-        builder: ShapeBuilder = None,
-        ifc_points: list[tuple[float, float]] = None,
-        arc_middles: list[int] = None
-    ):
-        self.builder: ShapeBuilder = builder
-        self.ifc_points: list[tuple[float, float]] = ifc_points
-        self.arc_middles: list[int] = arc_middles
-
-    def makeIfcCurve(self) -> entity_instance:
-        _curve = self.builder.polyline(
-            points=self.ifc_points,
-            arc_points=self.arc_middles,
-            closed=True
-        )
-        _curve.SelfIntersect = False
-        return _curve
-
-
 class PlateType:
     def __init__(
         self,
-        settings: Settings = None,
-        model: Model = None,
-        template: Template = None
+        settings: Settings,
+        model: Model,
+        template: Template
     ):
         self.settings: Settings = settings
         self.model: Model = model
         self.template: Template = template
         self.ifcPlateType: entity_instance = self.makeIfcPlateType()
-    
+
     def makeIfcPlateType(self) -> entity_instance:
         _profiles: list[entity_instance] = [self.template.cuttingThroughProfile] + self.template.millingProfiles
         _type: entity_instance = create_PlateType(
@@ -464,16 +392,17 @@ class PlateType:
         )
         return _type
 
+
 class Plate:
     def __init__(
         self,
-        model: Model = None,
-        type: PlateType = None
+        model: Model,
+        type: PlateType
     ):
         self.model: Model = model
         self.type: PlateType = type
         self.ifcPlate: entity_instance = self.makeIfcPlate()
-    
+
     def makeIfcPlate(self) -> entity_instance:
         _plate: entity_instance = create_Plate(
             model=self.model.ifcFile,
@@ -482,3 +411,98 @@ class Plate:
             type=self.type.ifcPlateType
         )
         return _plate
+
+
+class Block:
+    def __init__(
+        self,
+        settings: Settings,
+        model: Model,
+        name: str,
+        sheets: list[Sheet]
+    ):
+        self.settings: Settings = settings
+        self.model: Model = model
+        self.name: str = name
+        self.sheets: list[Sheet] = sheets
+        self.templates: list[Template] = self.formTemplates()
+        self.plateTypes: list[PlateType] = self.makePlateTypes()
+        self.plates: list[Plate] = self.makePlates()
+
+    def formTemplates(self) -> list[Template]:
+        _detailComparer: DetailComparer = DetailComparer(self.model, self.name, self.sheets[0].getDetails())
+        return _detailComparer.templates
+
+    def makePlateTypes(self) -> list[PlateType]:
+        _types: list[PlateType] = []
+        for template in self.templates:
+            _types.append(PlateType(self.settings, self.model, template))
+        return _types
+
+    def makePlates(self) -> list[Plate]:
+        _plates: list[Plate] = []
+        for plateType in self.plateTypes:
+            for _ in range(len(plateType.template.details)):
+                _plates.append(Plate(self.model, plateType))
+        return _plates
+
+
+class Profile:
+    def __init__(
+        self,
+        builder: ShapeBuilder,
+        name: str,
+        outer_curve: entity_instance,
+        inner_curves: list[entity_instance] = []
+    ):
+        self.builder: ShapeBuilder = builder
+        self.name: str = name
+        self.outer_curve: entity_instance = outer_curve
+        self.inner_curves: list[entity_instance] = inner_curves
+
+    def makeIfcProfile(self) -> entity_instance:
+        _profile = self.builder.profile(
+            name=self.name,
+            outer_curve=self.outer_curve,
+            inner_curves=self.inner_curves
+        )
+        return _profile
+
+
+class Curve:
+    def __init__(
+        self,
+        model: Model,
+        drillPath: DrillPath
+    ):
+        self.model: Model = model
+        self.drillPath: DrillPath = drillPath
+
+    def makeIfcCurve(self) -> entity_instance:
+        if isinstance(self.drillPath.polyline, LWPolyline) or isinstance(self.drillPath.polyline, Polyline):
+            _curve = self._makePolylineCurve()
+        if isinstance(self.drillPath.polyline, Circle):
+            _curve = self._makeCircleCurve()
+        return _curve
+
+    def _makePolylineCurve(self) -> entity_instance:
+        _curvePoints: tuple[list[tuple[float, float]], list[int]] = convert_poly_to_PointList(self.drillPath.polyline) # type: ignore
+        _curve = self.model.builder.polyline(
+            points=_curvePoints[0],
+            arc_points=_curvePoints[1],
+            closed=True
+        )
+        _curve.SelfIntersect = False
+        return _curve
+
+    def _makeCircleCurve(self) -> entity_instance:
+        _center3 = self.drillPath.polyline.dxf.center
+        _center2 = list(Vec2(_center3))
+        _center2 = [round(c, 2) for c in _center2]
+        _radius = round(self.drillPath.polyline.dxf.radius, 2)
+        _file = self.model.ifcFile
+        _ifcCenter = create_CartesianPoint(_file, _center2)
+        _ifcLoc = create_Axis2Placement2D(_file, _ifcCenter, self.model.dir_x2d)
+        _curve = _file.createIfcCircle(_ifcLoc, _radius)
+        # _curve = self.builder.circle(_center, _radius)
+        return _curve

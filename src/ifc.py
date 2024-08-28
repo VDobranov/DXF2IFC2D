@@ -38,6 +38,49 @@ def create_CartesianPoint(model: ios.file, coords: list[float]) -> entity_instan
         return model.createIfcCartesianPoint(coords)
 
 
+def check_Direction(model: ios.file, d_ratios: list[float]) -> bool:
+    for p in model.by_type("IfcDirection"):
+        if d_ratios == list(p.DirectionRatios):
+            return True
+    return False
+
+def create_Direction(model: ios.file, d_ratios: list[float]) -> entity_instance:  # type: ignore
+    found = check_Direction(model, d_ratios)
+    if found:
+        for p in model.by_type("IfcDirection"):
+            if d_ratios == list(p.DirectionRatios):
+                return p
+    else:
+        return model.createIfcDirection(d_ratios)
+
+
+def check_Axis2Placement2D(model: ios.file, point: entity_instance, dir_x: entity_instance) -> bool:
+    """
+    Функция check_Axis2Placement2D проверяет, существует ли уже в модели объект IfcAxis2Placement2D с заданными координатами и направлением оси x.
+
+    :param point: объект IfcCartesianPoint, представляющий координаты
+    :type point: entity_instance
+    :param dir_x: объект IfcDirection, представляющий направление оси x
+    :type dir_x: entity_instance
+    :return: True, если объект существует, False в противном случае
+    :rtype: bool
+    """
+    for p in model.by_type("IfcAxis2Placement2D"):
+        if point == p.Location and dir_x == p.RefDirection:
+            return True
+    return False
+
+
+def create_Axis2Placement2D(model: ios.file, point: entity_instance, dir_x: entity_instance) -> entity_instance:  # type: ignore
+    found = check_Axis2Placement2D(model, point, dir_x)
+    if found:
+        for p in model.by_type("IfcAxis2Placement2D"):
+            if point == p.Location and dir_x == p.RefDirection:
+                return p
+    else:
+        return model.createIfcAxis2Placement2D(point, dir_x)
+
+
 def check_Axis2Placement3D(model: ios.file, point: entity_instance, dir_z: entity_instance, dir_x: entity_instance) -> bool:
     """
     Функция check_Axis2Placement3D проверяет, существует ли уже в модели объект IfcAxis2Placement3D с заданными координатами, направлением оси z и направлением оси x.

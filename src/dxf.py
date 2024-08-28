@@ -1,10 +1,13 @@
 import math
 
+import re
 from typing import Sequence, Iterable
 import ezdxf
 import ezdxf.math
 import ezdxf.path
 from ezdxf import select
+from ezdxf.entities.circle import Circle
+from ezdxf.entities.dxfgfx import DXFGraphic
 from ezdxf.entities.lwpolyline import LWPolyline
 from ezdxf.entities.polyline import Polyline
 from ezdxf.layouts.layout import Modelspace
@@ -70,6 +73,13 @@ def get_arc_length(p1: Sequence[float], p2: Sequence[float], pc: Sequence[float]
     return round(2 * math.asin(a) * r, TOL)
 
 
+def get_dxf_entity_length(entity: DXFGraphic) -> float:
+    if isinstance(entity, LWPolyline) or isinstance(entity, Polyline):
+        _length = get_poly_length(entity)
+    if isinstance(entity, Circle):
+        _length = get_circle_length(entity)
+    return _length
+
 def get_poly_length(pline: LWPolyline | Polyline) -> float:
     """
     Функция get_poly_length принимает объект LWPolyline или Polyline и вычисляет длину полилинии (с учётом арок).
@@ -90,6 +100,19 @@ def get_poly_length(pline: LWPolyline | Polyline) -> float:
         else:
             _length += get_vector_length(_points[i], _points[j])
     return _length
+
+def get_circle_length(circle: Circle) -> float:
+    """
+    Функция get_circle_length вычисляет длину окружности.
+
+    :param circle: объект Circle
+    :type circle: Circle
+    :return: длина окружности
+    :rtype: float
+    """
+    return round(circle.dxf.radius * math.pi * 2, TOL)
+
+
 
 
 def check_polys(pline: LWPolyline | Polyline, polys: list[LWPolyline | Polyline]) -> bool:
@@ -356,12 +379,12 @@ def get_centroid(polys: list[LWPolyline | Polyline]) -> tuple[float, float]:
     :return: кортеж с координатами центра масс полилиний
     """
     if len(polys) == 0:
-        return [[0,0]]
+        return (0.,0.)
     _points: list[tuple[float, float]] = []
     for p in polys:
         _path = ezdxf.path.make_path(p)
-        _points.append(shapely.centroid(shapely.geometry.Polygon(_path.flattening(1))))
-    return shapely.centroid(shapely.geometry.MultiPoint(_points)).coords
+        _points.append(shapely.centroid(shapely.geometry.Polygon(_path.flattening(1)))) # type: ignore
+    return shapely.centroid(shapely.geometry.MultiPoint(_points)).coords # type: ignore
 
 
 # Отсюда: https://stackoverflow.com/a/67839390/12785478
