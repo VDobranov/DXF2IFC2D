@@ -8,10 +8,14 @@
 
 Блок для экспериментов: [CORNER-S](https://www.wikihouse.cc/skylark-250/corner-s).
 
-## Результат на 2024.07.23
+## Текущая схема процесса (2024.08.24)
+
+![Workflow](./schemes/Workflow/Workflow.png)
+
+<!-- ## Результат на 2024.07.23
 
 ### SKYLARK250_END-S-0
 
 |DXF|IFC|
 |-|-|
-|![DXF](./drawings/pngs/SKYLARK250_END-S-0_cnc.png)|![IFC](./pics/SKYLARK250_END-S-0_cnc_IFC.png)|
+|![DXF](./drawings/pngs/SKYLARK250_END-S-0_cnc.png)|![IFC](./pics/SKYLARK250_END-S-0_cnc_IFC.png)| -->
