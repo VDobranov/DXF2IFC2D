@@ -1,0 +1,41 @@
+@startuml "DXF_structure"
+
+!include styling.wsd
+
+title
+Файл DXF для ЧПУ-станка
+end title
+
+left to right direction
+
+object Лист {
+    Слои
+}
+
+Лист::Слои -- Слои
+
+package Слои {
+    object 0 #White
+    object 0_SHEET_SPRUCEPLY_2440X122 #Red
+    object 1_ANYTOOL_1MMDEEP_LABELS_S #Yellow
+    object 3_ANYTOOL_CUTTHROUGH_INSID #Cyan
+    object 4_ANYTOOL_CUTTHROUGH_OUTSI #BLue
+    object 5_ANYTOOL_HALF_MILL_9MM_IN #Green
+    object TC #Magenta
+
+}
+
+package Деталь {
+    object "Контур детали" as contour
+    object "Сквозные вырезы" as cuts
+    object "Фрезерование на полтолщины" as mills
+    object Текст
+}
+
+
+contour -- 4_ANYTOOL_CUTTHROUGH_OUTSI
+cuts -- 3_ANYTOOL_CUTTHROUGH_INSID
+mills -- 5_ANYTOOL_HALF_MILL_9MM_IN
+Текст -- 1_ANYTOOL_1MMDEEP_LABELS_S
+
+@enduml

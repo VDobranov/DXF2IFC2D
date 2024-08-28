@@ -1,0 +1,34 @@
+@startuml "Workflow"
+
+!include styling.wsd
+skinparam DefaultTextAlignment center
+
+title
+Схема процесса
+end title
+
+!$u = "<&person>"
+!$s = "<&terminal>"
+
+start
+    :База блоков Wikihouse<
+    :$u Выбрать блок для получения модели;
+    :$u Скачать DXF с раскроем для выбранного блока;
+    :$s Конвертировать DXF -> IFC;
+    if (Первая ковертация?) then (ДА)
+        :$u Открыть IFC в BonsaiBIM;
+        :$u Собрать модель блока из деталей;
+        :$u Переименовать шаблоны деталей согласно DXF;
+        :$u Выгрузить CSV из BonsaiBIM с координатами деталей\nи именами шаблонов;
+    else (НЕТ)
+    endif
+    :$s Пересобрать IFC с учётом данных в CSV;
+    :IFC-модель выбранного блока>
+end
+
+legend
+$u — Ручные операции
+$s — Скриптовые операции
+end legend
+
+@enduml

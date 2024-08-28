@@ -1,0 +1,25 @@
+@startuml "IFC_converted"
+
+!include styling.wsd
+
+hide members
+
+title
+Файл IFC после конвертации из DXF
+end title
+
+object "…" as ETC
+object IfcBuildingStorey
+object IfcPlateType #SandyBrown
+object IfcPlate #LightGreen
+object "IfcRelContainedInSpatialStructure" as RCISS1
+object IfcRelDefinesByType
+
+ETC -- IfcBuildingStorey
+IfcBuildingStorey -- "ContainsElements" RCISS1
+RCISS1 "ContainedInStructure" -- IfcPlate
+
+IfcPlateType -- "Types" IfcRelDefinesByType
+IfcRelDefinesByType "IsTypedBy" -- IfcPlate
+
+@enduml

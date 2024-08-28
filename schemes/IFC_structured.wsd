@@ -1,0 +1,43 @@
+@startuml "IFC_structured"
+
+!include styling.wsd
+
+hide members
+
+title
+Файл IFC после пересборки
+end title
+
+object "…" as ETC
+object IfcBuildingStorey
+object IfcAssemblyType #SandyBrown
+object IfcAssembly #LightGreen
+object IfcPlateType #SandyBrown
+object "IfcPlate" as P1 #LightGreen
+object "IfcPlate" as P2 #LightGreen
+object "IfcRelAggregates" as RA1
+object "IfcRelAggregates" as RA2
+' object "IfcRelAggregates" as RA3
+object "IfcRelContainedInSpatialStructure" as RCISS1
+object "IfcRelDefinesByType" as RDBT1
+object "IfcRelDefinesByType" as RDBT2
+object "IfcRelDefinesByObject" as RDBO1
+
+
+ETC -- IfcBuildingStorey
+IfcBuildingStorey -- "ContainsElements" RCISS1
+RCISS1 "ContainedInStructure" -- IfcAssembly
+
+IfcAssembly -- "IsDecomposedBy" RA1
+RA1 "Decomposes" -- P1
+IfcAssemblyType -- "IsDecomposedBy" RA2
+RA2 "Decomposes" -- P2
+
+IfcAssemblyType -- "Types" RDBT2
+RDBT2 "IsTypedBy" -- IfcAssembly
+IfcPlateType -- "Types" RDBT1
+RDBT1 "IsTypedBy" -- P2
+P1 -- "Declares" RDBO1
+RDBO1 "IsDeclaredBy" -- P2
+
+@enduml

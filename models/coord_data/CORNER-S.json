@@ -1,0 +1,54 @@
+[
+    {
+        "Name": "CORNER-S/1",
+        "trueName": "CORNER-S/D",
+        "x": "158.75",
+        "y": "18.00",
+        "z": "1429.25",
+        "Axis.X": "0.00",
+        "Axis.Y": "-1.00",
+        "Axis.Z": "0.00",
+        "RefDirection.X": "0.00",
+        "RefDirection.Y": "0.00",
+        "RefDirection.Z": "-1.00"
+    },
+    {
+        "Name": "CORNER-S/2",
+        "trueName": "CORNER-S/C",
+        "x": "18.00",
+        "y": "158.75",
+        "z": "1429.25",
+        "Axis.X": "-1.00",
+        "Axis.Y": "0.00",
+        "Axis.Z": "0.00",
+        "RefDirection.X": "0.00",
+        "RefDirection.Y": "0.00",
+        "RefDirection.Z": "-1.00"
+    },
+    {
+        "Name": "CORNER-S/3",
+        "trueName": "CORNER-S/A",
+        "x": "299.50",
+        "y": "158.75",
+        "z": "1429.25",
+        "Axis.X": "1.00",
+        "Axis.Y": "0.00",
+        "Axis.Z": "0.00",
+        "RefDirection.X": "0.00",
+        "RefDirection.Y": "0.00",
+        "RefDirection.Z": "-1.00"
+    },
+    {
+        "Name": "CORNER-S/4",
+        "trueName": "CORNER-S/B",
+        "x": "158.75",
+        "y": "299.50",
+        "z": "1429.25",
+        "Axis.X": "0.00",
+        "Axis.Y": "1.00",
+        "Axis.Z": "0.00",
+        "RefDirection.X": "0.00",
+        "RefDirection.Y": "0.00",
+        "RefDirection.Z": "-1.00"
+    }
+]

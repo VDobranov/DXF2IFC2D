@@ -1,6 +1,10 @@
 @startuml "Classes"
-!pragma layout smetana
 
+!include styling.wsd
+
+title
+Классы конвертера
+end title
 
 class Settings {
     -thickness : int

@@ -1,0 +1,6 @@
+@startuml Styling
+
+skinparam defaultFontName Iosevka
+' skinparam WrapWidth 400
+
+@enduml

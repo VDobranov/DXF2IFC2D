@@ -1,5 +1,9 @@
 @startuml General
 
+title
+НЕАКУТАЛЬНО
+end title
+
 <style>
 activityDiagram {
   FontName Iosevka
